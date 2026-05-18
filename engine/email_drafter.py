@@ -49,7 +49,6 @@ def _compliance_footer_en() -> str:
 ---
 {AGENT_NAME} | {AGENT_TITLE}
 {COMPANY_NAME}
-{AGENCY_ADDRESS}
 Email: {AGENT_EMAIL}
 
 This email is a commercial introduction on behalf of {CLIENT_NAME} ({CLIENT_WEBSITE}).
@@ -65,7 +64,6 @@ def _compliance_footer_es() -> str:
 ---
 {AGENT_NAME} | {AGENT_TITLE}
 {COMPANY_NAME}
-{AGENCY_ADDRESS}
 Email: {AGENT_EMAIL}
 
 Este correo es una presentación comercial en nombre de {CLIENT_NAME} ({CLIENT_WEBSITE}).
