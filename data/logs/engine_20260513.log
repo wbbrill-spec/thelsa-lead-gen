@@ -1,0 +1,212 @@
+2026-05-13 11:49:45,098 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
+2026-05-13 11:49:45,098 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5050
+2026-05-13 12:11:51,523 [INFO] engine.main: ============================================================
+2026-05-13 12:11:51,524 [INFO] engine.main: TMS CORP LEAD GEN ENGINE — PIPELINE RUN STARTED
+2026-05-13 12:11:51,524 [INFO] engine.main: Time: 2026-05-13T17:11:51.524069 UTC
+2026-05-13 12:11:51,524 [INFO] engine.main: ============================================================
+2026-05-13 12:11:51,526 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
+2026-05-13 12:11:51,528 [INFO] engine.main: AI calls today so far: 0
+2026-05-13 12:11:51,528 [INFO] engine.main: -- Step 1: Scraping intelligence sources --
+2026-05-13 12:11:51,528 [INFO] engine.scraper: === Scraper starting ===
+2026-05-13 12:11:51,528 [INFO] engine.scraper: Scraping RSS: Dallas Morning News Business
+2026-05-13 12:11:51,646 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
+2026-05-13 12:11:51,647 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5050
+2026-05-13 12:11:52,280 [INFO] engine.scraper: Scraping RSS: Houston Chronicle Business
+2026-05-13 12:11:53,253 [INFO] engine.scraper: Scraping RSS: San Antonio Express Business
+2026-05-13 12:11:53,813 [INFO] engine.scraper: Scraping RSS: Austin American-Statesman Business
+2026-05-13 12:11:54,666 [INFO] engine.scraper: Scraping RSS: Chicago Tribune Business
+2026-05-13 12:11:55,115 [INFO] engine.scraper: Scraping RSS: Arizona Republic Business
+2026-05-13 12:11:55,735 [INFO] engine.scraper: Scraping RSS: Globe and Mail Business
+2026-05-13 12:11:56,516 [INFO] engine.scraper: Scraping RSS: Financial Post
+2026-05-13 12:11:56,886 [INFO] engine.scraper: Scraping RSS: CBC Business
+2026-05-13 12:12:20,261 [WARNING] engine.scraper: RSS parse error for CBC Business: [Errno 60] Operation timed out
+2026-05-13 12:12:20,267 [INFO] engine.scraper: Scraping RSS: El Financiero
+2026-05-13 12:12:21,196 [INFO] engine.scraper: Scraping RSS: Mexico Business News
+2026-05-13 12:12:21,513 [INFO] engine.scraper: Scraping RSS: El Economista
+2026-05-13 12:12:21,942 [INFO] engine.scraper: Scraping RSS: Google News: US company expanding to Mexico
+2026-05-13 12:12:22,584 [INFO] engine.scraper: Scraping RSS: Google News: Canada company expanding to Mexico
+2026-05-13 12:12:23,442 [INFO] engine.scraper: Scraping RSS: Google News: nearshoring Mexico
+2026-05-13 12:12:24,013 [INFO] engine.scraper: Scraping RSS: Google News: empresa registra Mexico
+2026-05-13 12:12:24,652 [INFO] engine.scraper: Scraping RSS: Google News: Mexican company expanding USA
+2026-05-13 12:12:25,228 [INFO] engine.scraper: Scraping RSS: Google News: Mexican company Canada
+2026-05-13 12:12:25,814 [INFO] engine.scraper: Scraping RSS: Google News: empresa mexicana expansion EEUU
+2026-05-13 12:12:26,435 [INFO] engine.scraper: Scraping RSS: Google News: empresa mexicana Canada
+2026-05-13 12:12:26,983 [INFO] engine.scraper: Scraping RSS: Google News: relocating employees to Mexico
+2026-05-13 12:12:27,404 [INFO] engine.scraper: Scraping RSS: Google News: moving operations to Mexico
+2026-05-13 12:12:27,946 [INFO] engine.scraper: Scraping RSS: Google News: setting up office Mexico
+2026-05-13 12:12:28,635 [INFO] engine.scraper: Scraping RSS: Google News: maquiladora expansion
+2026-05-13 12:12:28,978 [INFO] engine.scraper: Scraping RSS: Google News: nearshoring relocation employees
+2026-05-13 12:12:29,503 [INFO] engine.scraper: Scraping RSS: Google News: moving to Mexico business
+2026-05-13 12:12:30,182 [INFO] engine.scraper: Scraping RSS: Google News: traslado empleados Mexico
+2026-05-13 12:12:30,760 [INFO] engine.scraper: Scraping RSS: Google News: relocating to US from Mexico
+2026-05-13 12:12:31,375 [INFO] engine.scraper: Scraping RSS: Reddit r/Mexico (new posts)
+2026-05-13 12:12:31,989 [INFO] engine.scraper: Scraping RSS: Reddit r/Expats (new posts)
+2026-05-13 12:12:32,537 [INFO] engine.scraper: Scraping RSS: Reddit r/Entrepreneur Mexico expansion
+2026-05-13 12:12:33,301 [INFO] engine.scraper: Scraping RSS: Reddit r/smallbusiness Mexico
+2026-05-13 12:12:34,112 [INFO] engine.scraper: Scraping RSS: Reddit r/mexica (nearshoring discussion)
+2026-05-13 12:12:34,412 [INFO] engine.scraper: Scraping RSS: Reddit r/canadaexpats (new posts)
+2026-05-13 12:12:34,775 [INFO] engine.scraper: Scraping RSS: Google Alert: relocating to Mexico
+2026-05-13 12:12:35,041 [INFO] engine.scraper: Source cap reached (35). Stopping.
+2026-05-13 12:12:35,042 [INFO] engine.scraper: === Scraper done: 19 relevant signals from 35 sources ===
+2026-05-13 12:12:35,042 [INFO] engine.main:    Found 19 relevant signals.
+2026-05-13 12:12:35,042 [INFO] engine.main: -- Step 2: AI qualification (Claude Haiku) --
+2026-05-13 12:12:36,924 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:36,984 [INFO] engine.classifier: Score 1/10: John Deere [to_mexico] — John Deere is a Fortune 500 multinational corporation with e
+2026-05-13 12:12:38,871 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:40,917 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:40,931 [INFO] engine.classifier: Score 4/10: PMG [to_mexico] — Headline confirms cross-border expansion (Canada to Mexico) 
+2026-05-13 12:12:42,862 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:42,874 [INFO] engine.classifier: Score 1/10: Netflix [to_mexico] — Netflix is a Fortune 500 multinational with tens of thousand
+2026-05-13 12:12:44,501 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:44,513 [INFO] engine.classifier: Score 2/10: C.H. Robinson [unknown] — C.H. Robinson is a Fortune 500 multinational logistics compa
+2026-05-13 12:12:46,549 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:48,092 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:49,821 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:49,830 [INFO] engine.classifier: Score 1/10: BBVA [to_us_canada] — BBVA is a major multinational banking corporation (Fortune 5
+2026-05-13 12:12:51,977 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:54,330 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:55,969 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:57,458 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:12:59,144 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:13:00,886 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:13:00,896 [INFO] engine.classifier: Score 1/10: Air Canada [to_mexico] — Air Canada is a major Fortune 500 multinational airline with
+2026-05-13 12:13:02,498 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:13:02,505 [INFO] engine.classifier: Score 0/10: Whole Woman's Health [unknown] — This is a domestic US relocation (Texas to New Mexico), not 
+2026-05-13 12:13:04,468 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:13:06,005 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:13:07,541 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:13:09,043 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 12:13:09,052 [INFO] engine.classifier: Qualification complete: 0 new leads qualified.
+2026-05-13 12:13:09,053 [INFO] engine.main:    0 new companies qualified.
+2026-05-13 12:13:09,053 [INFO] engine.main: -- Step 3 & 4: Contact enrichment + email drafting --
+2026-05-13 12:13:09,053 [INFO] engine.main:    Enrichment mode: manual
+2026-05-13 12:13:09,056 [INFO] engine.main:    No companies ready for enrichment/drafting.
+2026-05-13 12:13:09,056 [INFO] engine.main: -- Step 5: Follow-up scheduler --
+2026-05-13 12:13:09,057 [INFO] engine.tracker: === Follow-up scheduler running ===
+2026-05-13 12:13:09,058 [INFO] engine.tracker: === Follow-up scheduler done: 0 drafts queued ===
+2026-05-13 12:13:09,058 [INFO] engine.main:    0 follow-up drafts queued.
+2026-05-13 12:13:09,059 [INFO] engine.main: ============================================================
+2026-05-13 12:13:09,059 [INFO] engine.main: PIPELINE RUN COMPLETE
+2026-05-13 12:13:09,061 [INFO] engine.main: Open the dashboard to review and approve pending emails:
+2026-05-13 12:13:09,061 [INFO] engine.main:   python run.py dashboard
+2026-05-13 12:13:09,061 [INFO] engine.main: ============================================================
+2026-05-13 12:13:22,841 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
+2026-05-13 12:13:22,842 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5050
+2026-05-13 12:28:29,480 [INFO] engine.main: ============================================================
+2026-05-13 12:28:29,480 [INFO] engine.main: TMS CORP LEAD GEN ENGINE — PIPELINE RUN STARTED
+2026-05-13 12:28:29,480 [INFO] engine.main: Time: 2026-05-13T17:28:29.480728 UTC
+2026-05-13 12:28:29,480 [INFO] engine.main: ============================================================
+2026-05-13 12:42:09,596 [INFO] engine.main: ============================================================
+2026-05-13 12:42:09,596 [INFO] engine.main: TMS CORP LEAD GEN ENGINE — PIPELINE RUN STARTED
+2026-05-13 12:42:09,596 [INFO] engine.main: Time: 2026-05-13T17:42:09.596592 UTC
+2026-05-13 12:42:09,596 [INFO] engine.main: ============================================================
+2026-05-13 12:42:56,920 [INFO] engine.main: ============================================================
+2026-05-13 12:42:56,920 [INFO] engine.main: TMS CORP LEAD GEN ENGINE — PIPELINE RUN STARTED
+2026-05-13 12:42:56,920 [INFO] engine.main: Time: 2026-05-13T17:42:56.920891 UTC
+2026-05-13 12:42:56,920 [INFO] engine.main: ============================================================
+2026-05-13 13:08:54,039 [INFO] engine.main: ============================================================
+2026-05-13 13:08:54,039 [INFO] engine.main: TMS CORP LEAD GEN ENGINE — PIPELINE RUN STARTED
+2026-05-13 13:08:54,039 [INFO] engine.main: Time: 2026-05-13T18:08:54.039912 UTC
+2026-05-13 13:08:54,039 [INFO] engine.main: ============================================================
+2026-05-13 13:08:54,046 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
+2026-05-13 13:08:54,047 [INFO] engine.main: AI calls today so far: 19
+2026-05-13 13:08:54,047 [INFO] engine.main: Pipeline run ID: be2ec383-843f-4d60-b781-b4571caee8d9
+2026-05-13 13:08:54,047 [INFO] engine.main: -- Step 1: Scraping intelligence sources --
+2026-05-13 13:08:54,047 [INFO] engine.scraper: === Scraper starting ===
+2026-05-13 13:08:54,047 [INFO] engine.scraper: Scraping RSS: Dallas Morning News Business
+2026-05-13 13:08:54,167 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
+2026-05-13 13:08:54,167 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5051
+2026-05-13 13:08:54,174 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5051
+ * Running on http://10.0.0.177:5051
+2026-05-13 13:08:54,174 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
+2026-05-13 13:08:54,664 [INFO] engine.scraper: Scraping RSS: Houston Chronicle Business
+2026-05-13 13:08:55,270 [INFO] werkzeug: 127.0.0.1 - - [13/May/2026 13:08:55] "GET / HTTP/1.1" 200 -
+2026-05-13 13:08:55,356 [INFO] werkzeug: 127.0.0.1 - - [13/May/2026 13:08:55] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-05-13 13:08:56,343 [INFO] engine.scraper: Scraping RSS: San Antonio Express Business
+2026-05-13 13:08:56,799 [INFO] engine.scraper: Scraping RSS: Austin American-Statesman Business
+2026-05-13 13:08:57,542 [INFO] engine.scraper: Scraping RSS: Chicago Tribune Business
+2026-05-13 13:08:58,005 [INFO] engine.scraper: Scraping RSS: Arizona Republic Business
+2026-05-13 13:08:58,703 [INFO] engine.scraper: Scraping RSS: Globe and Mail Business
+2026-05-13 13:08:59,586 [INFO] engine.scraper: Scraping RSS: Financial Post
+2026-05-13 13:08:59,963 [INFO] engine.scraper: Scraping RSS: CBC Business
+2026-05-13 13:09:29,644 [WARNING] engine.scraper: RSS parse error for CBC Business: [Errno 60] Operation timed out
+2026-05-13 13:09:29,649 [INFO] engine.scraper: Scraping RSS: El Financiero
+2026-05-13 13:09:30,446 [INFO] engine.scraper: Scraping RSS: Mexico Business News
+2026-05-13 13:09:30,846 [INFO] engine.scraper: Scraping RSS: El Economista
+2026-05-13 13:09:31,354 [INFO] engine.scraper: Scraping RSS: Google News: US company expanding to Mexico
+2026-05-13 13:09:31,953 [INFO] engine.scraper: Scraping RSS: Google News: Canada company expanding to Mexico
+2026-05-13 13:09:32,902 [INFO] engine.scraper: Scraping RSS: Google News: nearshoring Mexico
+2026-05-13 13:09:33,388 [INFO] engine.scraper: Scraping RSS: Google News: empresa registra Mexico
+2026-05-13 13:09:33,932 [INFO] engine.scraper: Scraping RSS: Google News: Mexican company expanding USA
+2026-05-13 13:09:34,575 [INFO] engine.scraper: Scraping RSS: Google News: Mexican company Canada
+2026-05-13 13:09:35,166 [INFO] engine.scraper: Scraping RSS: Google News: empresa mexicana expansion EEUU
+2026-05-13 13:09:35,787 [INFO] engine.scraper: Scraping RSS: Google News: empresa mexicana Canada
+2026-05-13 13:09:36,322 [INFO] engine.scraper: Scraping RSS: Google News: relocating employees to Mexico
+2026-05-13 13:09:36,691 [INFO] engine.scraper: Scraping RSS: Google News: moving operations to Mexico
+2026-05-13 13:09:37,179 [INFO] engine.scraper: Scraping RSS: Google News: setting up office Mexico
+2026-05-13 13:09:37,768 [INFO] engine.scraper: Scraping RSS: Google News: maquiladora expansion
+2026-05-13 13:09:38,146 [INFO] engine.scraper: Scraping RSS: Google News: nearshoring relocation employees
+2026-05-13 13:09:38,594 [INFO] engine.scraper: Scraping RSS: Google News: moving to Mexico business
+2026-05-13 13:09:39,225 [INFO] engine.scraper: Scraping RSS: Google News: traslado empleados Mexico
+2026-05-13 13:09:39,881 [INFO] engine.scraper: Scraping RSS: Google News: relocating to US from Mexico
+2026-05-13 13:09:40,468 [INFO] engine.scraper: Scraping RSS: Reddit r/Mexico (new posts)
+2026-05-13 13:09:41,060 [INFO] engine.scraper: Scraping RSS: Reddit r/Expats (new posts)
+2026-05-13 13:09:41,574 [INFO] engine.scraper: Scraping RSS: Reddit r/Entrepreneur Mexico expansion
+2026-05-13 13:09:42,274 [INFO] engine.scraper: Scraping RSS: Reddit r/smallbusiness Mexico
+2026-05-13 13:09:43,098 [INFO] engine.scraper: Scraping RSS: Reddit r/mexica (nearshoring discussion)
+2026-05-13 13:09:43,369 [INFO] engine.scraper: Scraping RSS: Reddit r/canadaexpats (new posts)
+2026-05-13 13:09:43,780 [INFO] engine.scraper: Scraping RSS: Google Alert: relocating to Mexico
+2026-05-13 13:09:43,958 [INFO] engine.scraper: Source cap reached (35). Stopping.
+2026-05-13 13:09:43,959 [INFO] engine.scraper: === Scraper done: 19 relevant signals from 35 sources ===
+2026-05-13 13:09:43,959 [INFO] engine.main:    Found 19 relevant signals.
+2026-05-13 13:09:43,959 [INFO] engine.main: -- Step 2: AI qualification (Claude Haiku) --
+2026-05-13 13:09:45,811 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:09:45,872 [INFO] engine.classifier: Score 1/10: John Deere [to_mexico] — John Deere is a Fortune 500 multinational corporation with t
+2026-05-13 13:09:45,873 [INFO] engine.classifier:   Large multinational detected: John Deere — routing to RMC scan.
+2026-05-13 13:09:47,551 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:09:49,392 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:09:49,399 [INFO] engine.classifier: Score 4/10: PMG [to_mexico] — Article mentions PMG opening offices in Mexico City and Toro
+2026-05-13 13:09:52,671 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:09:52,680 [INFO] engine.classifier: Score 1/10: Netflix [to_mexico] — Netflix is a Fortune 500 multinational with $30B+ revenue an
+2026-05-13 13:09:52,681 [INFO] engine.classifier:   Large multinational detected: Netflix — routing to RMC scan.
+2026-05-13 13:09:54,412 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:09:54,426 [INFO] engine.classifier: Score 2/10: C.H. Robinson [unknown] — C.H. Robinson is a Fortune 500 multinational logistics compa
+2026-05-13 13:09:54,426 [INFO] engine.classifier:   Large multinational detected: C.H. Robinson — routing to RMC scan.
+2026-05-13 13:09:56,358 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:09:57,997 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:00,043 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:01,978 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:01,990 [INFO] engine.classifier: Score 1/10: BBVA [to_us_canada] — BBVA is a major multinational banking corporation (Fortune 5
+2026-05-13 13:10:01,990 [INFO] engine.classifier:   Large multinational detected: BBVA — routing to RMC scan.
+2026-05-13 13:10:03,459 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:05,884 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:07,622 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:09,463 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:11,514 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:11,524 [INFO] engine.classifier: Score 1/10: Air Canada [to_mexico] — Air Canada is a major Fortune 500 multinational airline with
+2026-05-13 13:10:11,524 [INFO] engine.classifier:   Large multinational detected: Air Canada — routing to RMC scan.
+2026-05-13 13:10:13,151 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:13,163 [INFO] engine.classifier: Score 0/10: Whole Woman's Health [unknown] — This is a domestic US relocation (Texas to New Mexico), not 
+2026-05-13 13:10:14,789 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:16,327 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:17,692 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:19,297 [INFO] httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-05-13 13:10:19,309 [INFO] engine.classifier: Qualification complete: 0 new leads qualified.
+2026-05-13 13:10:19,309 [INFO] engine.main:    0 new companies qualified.
+2026-05-13 13:10:19,309 [INFO] engine.main: -- Step 3 & 4: Contact enrichment + email drafting --
+2026-05-13 13:10:19,309 [INFO] engine.main:    Enrichment mode: manual
+2026-05-13 13:10:19,314 [INFO] engine.main:    No companies ready for enrichment/drafting.
+2026-05-13 13:10:19,314 [INFO] engine.main: -- Step 3b: Large multinational RMC scan + drafting --
+2026-05-13 13:10:19,316 [INFO] engine.main:    No large multinational companies to process.
+2026-05-13 13:10:19,316 [INFO] engine.main: -- Step 5: Follow-up scheduler --
+2026-05-13 13:10:19,316 [INFO] engine.tracker: === Follow-up scheduler running ===
+2026-05-13 13:10:19,319 [INFO] engine.tracker: === Follow-up scheduler done: 0 drafts queued ===
+2026-05-13 13:10:19,319 [INFO] engine.main:    0 follow-up drafts queued.
+2026-05-13 13:10:19,319 [INFO] engine.main: ============================================================
+2026-05-13 13:10:19,319 [INFO] engine.main: PIPELINE RUN COMPLETE
+2026-05-13 13:10:19,323 [INFO] engine.main: Open the dashboard to review and approve pending emails:
+2026-05-13 13:10:19,323 [INFO] engine.main:   python run.py dashboard
+2026-05-13 13:10:19,323 [INFO] engine.main: ============================================================
+2026-05-13 13:10:56,769 [INFO] werkzeug: 127.0.0.1 - - [13/May/2026 13:10:56] "GET / HTTP/1.1" 200 -

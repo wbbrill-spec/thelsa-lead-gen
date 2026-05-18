@@ -1,0 +1,17 @@
+# Secrets
+.env
+*.json
+
+# Database (local SQLite — Render uses its own persistent disk or a DB service)
+data/*.db
+data/*.sqlite
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# OS
+.DS_Store

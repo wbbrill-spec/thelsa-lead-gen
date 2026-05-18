@@ -1,0 +1,2 @@
+2026-05-12 14:26:32,020 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
+2026-05-12 14:26:32,020 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5050

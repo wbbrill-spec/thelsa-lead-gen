@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: thelsa-lead-gen
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn web:app
+    envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false          # Set manually in Render dashboard
+      - key: SENDGRID_API_KEY
+        sync: false          # Set manually in Render dashboard
+      - key: AGENT_EMAIL
+        sync: false
+      - key: AGENT_NAME
+        sync: false
+      - key: AGENT_TITLE
+        sync: false
+      - key: AGENCY_ADDRESS
+        sync: false
