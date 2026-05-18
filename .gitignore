@@ -2,9 +2,14 @@
 .env
 *.json
 
-# Database (local SQLite — Render uses its own persistent disk or a DB service)
+# Database and runtime data
 data/*.db
 data/*.sqlite
+data/*.db-shm
+data/*.db-wal
+data/logs/
+data/test_output.txt
+data/.fuse_hidden*
 
 # Python
 __pycache__/

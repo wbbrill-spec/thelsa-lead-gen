@@ -1,6 +1,0 @@
-2026-05-07 17:50:47,233 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
-2026-05-07 17:50:47,234 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5050
-2026-05-07 17:55:56,776 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
-2026-05-07 17:55:56,776 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5050
-2026-05-07 17:56:20,487 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
-2026-05-07 17:56:20,487 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5050

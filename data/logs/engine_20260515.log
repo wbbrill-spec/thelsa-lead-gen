@@ -1,8 +1,0 @@
-2026-05-15 15:40:19,594 [INFO] engine.database: Database initialised at /Users/williambrill/Documents/Claude/Projects/TMS Corp Lead Gen Engine/data/leads.db
-2026-05-15 15:40:19,594 [INFO] engine.dashboard: Starting approval dashboard at http://localhost:5051
-2026-05-15 15:40:19,607 [INFO] werkzeug: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:5051
- * Running on http://10.0.0.177:5051
-2026-05-15 15:40:19,607 [INFO] werkzeug: [33mPress CTRL+C to quit[0m
-2026-05-15 15:40:20,834 [INFO] werkzeug: 127.0.0.1 - - [15/May/2026 15:40:20] "GET / HTTP/1.1" 200 -
