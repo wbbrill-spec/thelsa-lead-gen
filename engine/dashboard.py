@@ -7,8 +7,11 @@ Run with: python run.py dashboard
 Opens at: http://localhost:5050
 """
 
+import json
 import logging
-from flask import Flask, render_template_string, request, redirect, url_for, flash
+import os
+
+from flask import Flask, request, redirect, url_for, session
 
 from engine.config import AGENT_NAME, COMPANY_NAME, CLIENT_NAME
 from engine.database import (
@@ -18,11 +21,22 @@ from engine.database import (
     get_db,
     add_to_suppression,
 )
-from engine.email_sender import send_approved_email
+from engine.gmail_drafts import create_gmail_draft
 
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
-app.secret_key = "tms-lead-engine-secret-change-in-prod"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "tms-lead-engine-secret-change-in-prod")
+
+# ── Google OAuth config ───────────────────────────────────────────────────────
+_GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
+_GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+_OAUTH_REDIRECT_URI   = os.environ.get("OAUTH_REDIRECT_URI", "http://localhost:5050/oauth2callback")
+_OAUTH_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/gmail.compose",
+]
 
 
 # ── HTML Templates ────────────────────────────────────────────────────────────
@@ -126,6 +140,78 @@ def _function_badge(func):
     return f'<span class="badge badge-func">{label}</span>'
 
 
+# ── Google OAuth helpers ──────────────────────────────────────────────────────
+
+def _build_oauth_flow():
+    from google_auth_oauthlib.flow import Flow
+    return Flow.from_client_config(
+        {
+            "web": {
+                "client_id":     _GOOGLE_CLIENT_ID,
+                "client_secret": _GOOGLE_CLIENT_SECRET,
+                "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
+                "token_uri":     "https://oauth2.googleapis.com/token",
+                "redirect_uris": [_OAUTH_REDIRECT_URI],
+            }
+        },
+        scopes=_OAUTH_SCOPES,
+        redirect_uri=_OAUTH_REDIRECT_URI,
+    )
+
+
+@app.route("/login")
+def login():
+    """Redirect to Google OAuth consent screen."""
+    if not _GOOGLE_CLIENT_ID or not _GOOGLE_CLIENT_SECRET:
+        return (
+            "<html><body style='font-family:sans-serif;padding:40px'>"
+            "<h2>OAuth not configured</h2>"
+            "<p>GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set as environment variables.</p>"
+            "</body></html>"
+        ), 500
+    flow = _build_oauth_flow()
+    auth_url, state = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+    )
+    session["oauth_state"] = state
+    return redirect(auth_url)
+
+
+@app.route("/oauth2callback")
+def oauth2callback():
+    """Handle Google OAuth callback, store token in session."""
+    try:
+        flow = _build_oauth_flow()
+        flow.fetch_token(authorization_response=request.url)
+        creds = flow.credentials
+        session["google_token"] = json.loads(creds.to_json())
+        session["google_email"] = ""
+        # Try to get the user's email from the token
+        try:
+            import google.oauth2.id_token
+            import google.auth.transport.requests
+            req = google.auth.transport.requests.Request()
+            id_info = google.oauth2.id_token.verify_oauth2_token(
+                creds.id_token, req, _GOOGLE_CLIENT_ID
+            )
+            session["google_email"] = id_info.get("email", "")
+        except Exception:
+            pass
+    except Exception as exc:
+        logger.warning("OAuth callback failed: %s", exc)
+        flash_custom("Google login failed. Please try again.", "err")
+    return redirect(url_for("index"))
+
+
+@app.route("/logout")
+def logout():
+    session.pop("google_token", None)
+    session.pop("google_email", None)
+    return redirect(url_for("index"))
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -215,7 +301,7 @@ def index():
             </select>
 
             <div>
-              <button type="submit" name="action" value="approve" class="btn btn-approve">Approve &amp; Send</button>
+              <button type="submit" name="action" value="approve" class="btn btn-approve">Save to Gmail Drafts</button>
               <button type="submit" name="action" value="reject"  class="btn btn-reject">Reject</button>
               <a href="/" class="btn btn-skip">Skip for now</a>
             </div>
@@ -229,13 +315,20 @@ def index():
             '<small>Run the engine to generate new leads and drafts.</small></div>'
         )
 
+    google_email = session.get("google_email", "")
+    google_token = session.get("google_token")
+    if google_token and google_email:
+        auth_link = f'Signed in as {google_email} &nbsp;|&nbsp; <a href="/logout">Sign out</a>'
+    else:
+        auth_link = '<a href="/login">Sign in with Google</a> to enable Gmail Drafts'
+
     html = f"""<!DOCTYPE html><html><head>
     <title>{COMPANY_NAME} — Lead Gen Engine</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     {BASE_STYLE}</head><body>
     <div class="nav">
       <h1>{COMPANY_NAME} — Lead Gen Engine &nbsp;|&nbsp; {CLIENT_NAME} Outreach</h1>
-      <span>Agent: {AGENT_NAME} &nbsp;|&nbsp;
+      <span>{auth_link} &nbsp;|&nbsp;
         <a href="/leads">All Leads</a> &nbsp;|&nbsp;
         <a href="/stats">Stats</a>
       </span>
@@ -275,7 +368,6 @@ def review(email_id):
     body_english = request.form.get("body_english", "")
     body_spanish = request.form.get("body_spanish", "")
     subject      = request.form.get("subject", "")
-    language     = request.form.get("language", "english")
 
     if action == "approve":
         # Save any agent edits back to the DB
@@ -286,11 +378,41 @@ def review(email_id):
             """, (body_english, body_spanish, subject, email_id))
 
         approve_email(email_id, AGENT_NAME)
-        result = send_approved_email(email_id, language)
-        if result:
-            flash_custom(f"Email sent successfully (ID {email_id}).", "ok")
+
+        # Look up the contact email for the draft
+        with get_db() as conn:
+            row = conn.execute("""
+                SELECT c.email as contact_email
+                FROM emails e
+                JOIN contacts c ON e.contact_id = c.id
+                WHERE e.id = ?
+            """, (email_id,)).fetchone()
+        to_email = row["contact_email"] if row else ""
+
+        # Create draft in the logged-in user's Gmail inbox
+        token_dict = session.get("google_token")
+        draft_id = create_gmail_draft(
+            to_email=to_email,
+            subject=subject,
+            body_english=body_english,
+            body_spanish=body_spanish or None,
+            token_dict=token_dict,
+        )
+
+        if draft_id:
+            flash_custom(
+                f"Draft saved to your Gmail Drafts folder (email ID {email_id}). "
+                f"Open Gmail to review and send.", "ok"
+            )
+        elif not token_dict:
+            flash_custom(
+                f"Approval saved but no Gmail draft created — "
+                f"please <a href='/login'>sign in with Google</a> first.", "err"
+            )
         else:
-            flash_custom(f"Approval saved but sending failed. Check logs.", "err")
+            flash_custom(
+                f"Approval saved but Gmail draft creation failed. Check logs.", "err"
+            )
 
     elif action == "reject":
         reject_email(email_id)
