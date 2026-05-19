@@ -124,7 +124,15 @@ def scrape_rss(source: dict) -> List[dict]:
     results = []
     logger.info(f"Scraping RSS: {source['name']}")
     try:
-        feed = feedparser.parse(source["url"])
+        # Fetch with an explicit timeout so slow/blocked sources don't hang the pipeline
+        try:
+            headers = {"User-Agent": "Mozilla/5.0 (compatible; TMSLeadBot/1.0)"}
+            resp = requests.get(source["url"], headers=headers, timeout=10)
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.text)
+        except Exception as fetch_err:
+            logger.warning(f"  Skipping {source['name']} — fetch failed: {fetch_err}")
+            return results
         count = 0
         for entry in feed.entries:
             if count >= MAX_ARTICLES_PER_SOURCE:
