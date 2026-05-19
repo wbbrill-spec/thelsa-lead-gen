@@ -261,8 +261,6 @@ def validate_config():
         missing.append("SENDGRID_API_KEY — get one at sendgrid.com")
     if not AGENT_EMAIL:
         missing.append("AGENT_EMAIL — your verified SendGrid sender email")
-    if not AGENCY_ADDRESS:
-        missing.append("AGENCY_ADDRESS — included in email footer")
     return missing
 
 
