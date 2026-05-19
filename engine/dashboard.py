@@ -212,6 +212,25 @@ def logout():
     return redirect(url_for("index"))
 
 
+@app.route("/trigger")
+def trigger():
+    """Run one full pipeline cycle in a background thread, then show the dashboard."""
+    import threading
+    from engine.main import setup_logging, run_pipeline
+    from engine.database import init_db
+    def _run():
+        try:
+            setup_logging()
+            init_db()
+            run_pipeline()
+        except Exception as exc:
+            logger.error("Pipeline run failed: %s", exc)
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    flash_custom("Pipeline started — leads and drafts will appear here shortly. Refresh in a minute.", "ok")
+    return redirect(url_for("index"))
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
