@@ -212,6 +212,37 @@ def logout():
     return redirect(url_for("index"))
 
 
+@app.route("/get_token")
+def get_token():
+    """
+    One-time helper: shows the current session token as JSON so you can
+    paste it into Render as GMAIL_REFRESH_TOKEN.  After that, no one on
+    the team ever needs to sign in again — the env var is used automatically.
+    """
+    token = session.get("google_token")
+    email = session.get("google_email", "unknown")
+    if not token:
+        return redirect(url_for("login"))
+    token_json = json.dumps(token, indent=2)
+    return f"""<!DOCTYPE html><html><head><title>Save Gmail Token</title>{BASE_STYLE}</head><body>
+    <div class="nav"><h1>Save Gmail Token to Render</h1><span><a href="/">← Back to Dashboard</a></span></div>
+    <div class="container"><div class="card">
+      <p style="font-size:14px">You are signed in as <strong>{email}</strong>.</p>
+      <p style="font-size:14px">
+        Copy the entire JSON block below and paste it into your Render Lead Gen app as the
+        environment variable <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">GMAIL_REFRESH_TOKEN</code>.
+        After that, click <em>Save &amp; Deploy</em> on Render.  The "Sign in with Google" prompt
+        will disappear for everyone on your team — Gmail drafts will just work.
+      </p>
+      <div class="label">GMAIL_REFRESH_TOKEN value (copy everything below)</div>
+      <textarea rows="18" onclick="this.select()" style="font-family:monospace;font-size:12px">{token_json}</textarea>
+      <p style="font-size:12px;color:#888;margin-top:10px">
+        ℹ️  This token has a refresh token embedded, so it never expires as long as it is used
+        at least once every 6 months.  You only need to do this once.
+      </p>
+    </div></div></body></html>"""
+
+
 @app.route("/trigger")
 def trigger():
     """Run one full pipeline cycle in a background thread, then show the dashboard."""
@@ -334,10 +365,16 @@ def index():
             '<small>Run the engine to generate new leads and drafts.</small></div>'
         )
 
+    # Nav auth indicator: env var token (production) > session token > sign-in prompt
+    _env_token = os.environ.get("GMAIL_REFRESH_TOKEN", "").strip()
     google_email = session.get("google_email", "")
     google_token = session.get("google_token")
-    if google_token and google_email:
-        auth_link = f'Signed in as {google_email} &nbsp;|&nbsp; <a href="/logout">Sign out</a>'
+    if _env_token:
+        auth_link = 'Gmail Drafts: <span style="color:#6ee7b7;font-weight:700">✓ Configured</span>'
+    elif google_token and google_email:
+        auth_link = (f'Signed in as {google_email} &nbsp;|&nbsp; '
+                     f'<a href="/get_token">Save token to Render</a> &nbsp;|&nbsp; '
+                     f'<a href="/logout">Sign out</a>')
     else:
         auth_link = '<a href="/login">Sign in with Google</a> to enable Gmail Drafts'
 
@@ -408,8 +445,17 @@ def review(email_id):
             """, (email_id,)).fetchone()
         to_email = row["contact_email"] if row else ""
 
-        # Create draft in the logged-in user's Gmail inbox
-        token_dict = session.get("google_token")
+        # Resolve token: env var (pre-stored service token) > session (one-time sign-in)
+        token_dict = None
+        env_token = os.environ.get("GMAIL_REFRESH_TOKEN", "").strip()
+        if env_token:
+            try:
+                token_dict = json.loads(env_token)
+            except Exception:
+                pass
+        if not token_dict:
+            token_dict = session.get("google_token")
+
         draft_id = create_gmail_draft(
             to_email=to_email,
             subject=subject,
@@ -420,13 +466,13 @@ def review(email_id):
 
         if draft_id:
             flash_custom(
-                f"Draft saved to your Gmail Drafts folder (email ID {email_id}). "
+                f"Draft saved to Gmail Drafts folder (email ID {email_id}). "
                 f"Open Gmail to review and send.", "ok"
             )
         elif not token_dict:
             flash_custom(
                 f"Approval saved but no Gmail draft created — "
-                f"please <a href='/login'>sign in with Google</a> first.", "err"
+                f"please <a href='/login'>sign in with Google</a> to enable Gmail drafts.", "err"
             )
         else:
             flash_custom(

@@ -43,21 +43,35 @@ def create_gmail_draft(
     PIPELINE_USER_TOKEN_PATH from the environment.  Returns the Gmail draft ID
     on success, None on any failure (including when no token is available).
     """
-    # Resolve credentials: prefer token_dict passed directly, then fall back to file
+    # Resolve credentials:
+    #   1. token_dict passed directly (session, one-time sign-in)
+    #   2. GMAIL_REFRESH_TOKEN env var (pre-stored service token — preferred for production)
+    #   3. PIPELINE_USER_TOKEN_PATH file (legacy local dev path)
     resolved_token_data: Optional[dict] = None
 
     if token_dict:
         resolved_token_data = token_dict
     else:
-        token_path_str = os.environ.get("PIPELINE_USER_TOKEN_PATH", "").strip()
-        if not token_path_str:
-            logger.debug("Gmail draft skipped: no token_dict and PIPELINE_USER_TOKEN_PATH not set")
-            return None
-        token_path = Path(token_path_str)
-        if not token_path.exists():
-            logger.debug("Gmail draft skipped: token file not found at %s", token_path)
-            return None
-        resolved_token_data = json.loads(token_path.read_text())
+        # Check env var first — this is what the Render deployment uses so the
+        # team never has to sign in individually.
+        env_token = os.environ.get("GMAIL_REFRESH_TOKEN", "").strip()
+        if env_token:
+            try:
+                resolved_token_data = json.loads(env_token)
+                logger.debug("Gmail draft: using GMAIL_REFRESH_TOKEN from environment")
+            except json.JSONDecodeError:
+                logger.warning("GMAIL_REFRESH_TOKEN is set but is not valid JSON — skipping")
+                return None
+        else:
+            token_path_str = os.environ.get("PIPELINE_USER_TOKEN_PATH", "").strip()
+            if not token_path_str:
+                logger.debug("Gmail draft skipped: no token available (set GMAIL_REFRESH_TOKEN in Render)")
+                return None
+            token_path = Path(token_path_str)
+            if not token_path.exists():
+                logger.debug("Gmail draft skipped: token file not found at %s", token_path)
+                return None
+            resolved_token_data = json.loads(token_path.read_text())
 
     try:
         from google.oauth2.credentials import Credentials
