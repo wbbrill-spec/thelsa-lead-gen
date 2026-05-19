@@ -10,20 +10,39 @@ Target functions for TMS Corp Lead Gen Engine:
   - Procurement Manager, Vendor Manager, Supply Chain Manager
 """
 
+import json
 import logging
-import requests
+import re
+import time
 from typing import Optional, List
+from urllib.parse import quote_plus
+
+import anthropic
+import requests
+from bs4 import BeautifulSoup
 
 from engine.config import (
     HUNTER_API_KEY,
     APOLLO_API_KEY,
     MAX_ENRICHMENT_LOOKUPS_PER_RUN,
+    ANTHROPIC_API_KEY,
+    SCREENING_MODEL,
 )
 from engine.database import (
     upsert_contact,
     get_counter,
     increment_counter,
 )
+
+_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
+}
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +214,145 @@ def lookup_apollo(company_name: str, domain: Optional[str] = None) -> List[dict]
         return []
 
 
+# ── Free web-search enrichment (no API key required) ─────────────────────────
+
+_CONTACT_SYSTEM = """You are a corporate contact research analyst.
+You will receive web search snippets about a company and its HR / Global Mobility team.
+Extract the best available contact and respond ONLY with valid JSON:
+
+{
+  "found": true | false,
+  "first_name": "<first name>" | null,
+  "last_name": "<last name>" | null,
+  "title": "<job title>" | null,
+  "email": "<email address if explicitly visible in snippets>" | null,
+  "email_pattern": "<guessed pattern: firstname.lastname | firstnamelastname | f.lastname | firstname>" | null,
+  "linkedin_url": "<linkedin profile URL if visible>" | null,
+  "confidence": "high" | "medium" | "low"
+}
+
+Rules:
+- Prefer HR Director, Global Mobility Manager, Relocation Manager, VP HR titles.
+- Only set email if you can see it explicitly in the snippets — do not invent emails.
+- Set email_pattern to the most common pattern you can infer from any visible email addresses at this domain, or default to "firstname.lastname".
+- confidence = high if you have name + title from a credible source (LinkedIn, company site).
+- confidence = low if you are guessing from indirect evidence."""
+
+
+def _ddg_search(query: str, num_results: int = 5) -> str:
+    """Fetch DuckDuckGo HTML results and return combined snippet text."""
+    try:
+        url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+        resp = requests.get(url, headers=_HEADERS, timeout=10)
+        if resp.status_code != 200:
+            return ""
+        soup = BeautifulSoup(resp.text, "html.parser")
+        snippets = []
+        for r in soup.select(".result__snippet")[:num_results]:
+            text = r.get_text(separator=" ", strip=True)
+            if text:
+                snippets.append(text)
+        time.sleep(1.5)
+        return "\n\n".join(snippets)[:2500]
+    except Exception as exc:
+        logger.warning(f"DuckDuckGo search failed: {exc}")
+        return ""
+
+
+def lookup_web_free(company_name: str, domain: Optional[str] = None) -> List[dict]:
+    """
+    Find HR / Global Mobility contacts using free DuckDuckGo search + Claude Haiku.
+    No Hunter or Apollo API key required.  Less precise than paid APIs but always available.
+    """
+    logger.info(f"  Web-search enrichment for: {company_name}")
+
+    queries = [
+        f'site:linkedin.com "{company_name}" "HR Director" OR "Global Mobility" OR "Relocation Manager"',
+        f'"{company_name}" "HR Director" OR "Human Resources Director" email contact',
+        f'"{company_name}" "Global Mobility" OR "Relocation Manager" contact',
+    ]
+    if domain:
+        queries.append(f'site:{domain} contact OR team OR "human resources" OR "global mobility"')
+
+    all_snippets: list[str] = []
+    for q in queries[:3]:          # cap at 3 searches to stay polite
+        text = _ddg_search(q)
+        if text:
+            all_snippets.append(text)
+
+    if not all_snippets:
+        logger.info(f"  No web results found for {company_name}")
+        return []
+
+    combined = "\n\n---\n\n".join(all_snippets)[:4000]
+    prompt = f"Company: {company_name}\nDomain: {domain or 'unknown'}\n\nSearch snippets:\n{combined}"
+
+    try:
+        response = _client.messages.create(
+            model=SCREENING_MODEL,
+            max_tokens=400,
+            system=_CONTACT_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw)
+    except Exception as exc:
+        logger.warning(f"  Web enrichment Claude call failed: {exc}")
+        return []
+
+    if not data.get("found") or not data.get("first_name"):
+        logger.info(f"  Web enrichment: no usable contact found for {company_name}")
+        return []
+
+    first  = (data.get("first_name") or "").strip()
+    last   = (data.get("last_name")  or "").strip()
+    title  = data.get("title")
+    email  = data.get("email")
+
+    # If no email visible, construct one from the guessed pattern + domain
+    if not email and domain and first:
+        pattern = data.get("email_pattern") or "firstname.lastname"
+        if pattern == "firstname.lastname" and last:
+            email = f"{first.lower()}.{last.lower()}@{domain}"
+        elif pattern == "firstnamelastname" and last:
+            email = f"{first.lower()}{last.lower()}@{domain}"
+        elif pattern == "f.lastname" and last:
+            email = f"{first[0].lower()}.{last.lower()}@{domain}"
+        elif pattern == "firstname":
+            email = f"{first.lower()}@{domain}"
+        elif last:
+            email = f"{first.lower()}.{last.lower()}@{domain}"
+        else:
+            email = f"hr@{domain}"
+
+    if not email:
+        logger.info(f"  Web enrichment: could not construct email for {company_name}")
+        return []
+
+    confidence = data.get("confidence", "low")
+    logger.info(
+        f"  Web enrichment found: {first} {last} <{email}> — {title} "
+        f"(confidence: {confidence})"
+    )
+
+    return [{
+        "first_name":        first or None,
+        "last_name":         last or None,
+        "email":             email,
+        "title":             title,
+        "target_function":   _infer_target_function(title or ""),
+        "linkedin_url":      data.get("linkedin_url"),
+        "email_verified":    False,   # not verified — constructed or extracted from web
+        "enrichment_source": "web_search",
+        "is_target_title":   True,
+        "confidence":        50 if confidence == "medium" else (30 if confidence == "low" else 70),
+    }]
+
+
 # ── Main enrichment runner ────────────────────────────────────────────────────
 
 def enrich_company(company_id: int, company_name: str,
@@ -223,9 +381,12 @@ def enrich_company(company_id: int, company_name: str,
         increment_counter("enrichment_lookups")
         logger.info(f"Hunter found {len(contacts_found)} contacts for {domain}")
 
+    # Free web-search fallback — always runs when paid APIs return nothing
     if not contacts_found:
-        logger.info(f"No contacts found via API for {company_name}. "
-                    f"Manual entry required in the dashboard.")
+        contacts_found = lookup_web_free(company_name, domain)
+
+    if not contacts_found:
+        logger.info(f"No contacts found for {company_name} via any method.")
         return []
 
     # Save top contact(s) to database
