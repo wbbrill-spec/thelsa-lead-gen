@@ -99,19 +99,17 @@ def auth_callback():
         flash(f"Sign-in failed: {exc}", "error")
         return redirect(url_for("login"))
 
-    # Check user is authorised (exists in users table and is active)
+    # Auto-create user on first login - open to anyone with a Google account
     email = user_info.get("email", "").lower()
+    name = user_info.get("name", email)
     with get_db() as db:
         user = db.query(User).filter(
             (User.email_gmail == email) | (User.email_outlook == email),
-            User.is_active == True,
         ).first()
-
         if not user:
-            flash("Access denied. Contact Bill Brill to be added to the system.", "error")
-            return redirect(url_for("login"))
-
-        # Store token in users table for scheduler access
+            user = User(full_name=name, email_gmail=email, oauth_provider="google", is_active=True)
+            db.add(user)
+            db.flush()
         user.oauth_token = creds.to_json()
         user.oauth_provider = "google"
         if not user.email_gmail:
