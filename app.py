@@ -422,6 +422,8 @@ def health():
 
 def create_app():
     create_all_tables()
+    from seed import seed
+    seed()
     return app
 
 
