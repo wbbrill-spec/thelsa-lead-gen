@@ -1,22 +1,7 @@
-# Secrets
-.env
-*.json
-
-# Database and runtime data
-data/*.db
-data/*.sqlite
-data/*.db-shm
-data/*.db-wal
-data/logs/
-data/test_output.txt
-data/.fuse_hidden*
-
-# Python
 __pycache__/
 *.pyc
-*.pyo
-venv/
-.venv/
-
-# OS
+*.db
+.env
+web_credentials.json
+*.egg-info/
 .DS_Store
