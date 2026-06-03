@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.company.name }}{% endblock %}
+
+{% block content %}
+
+<!-- Back + header -->
+<div style="margin-bottom: 20px;">
+  <a href="/" class="text-muted text-small" style="text-decoration: none;">← Back to Dashboard</a>
+</div>
+
+<div class="flex-between" style="margin-bottom: 24px;">
+  <div>
+    <h1 style="font-size: 20px; font-weight: 700;">{{ lead.company.name }}</h1>
+    <div class="text-muted text-small mt-8">
+      {{ lead.company.country_of_origin }} →
+      {{ 'US' if lead.company.country_of_origin == 'MX' else 'MX' }}
+      · {{ lead.company.industry or 'Unknown industry' }}
+      · Lead #{{ lead.id }}
+    </div>
+  </div>
+  <div class="flex gap-8">
+    <span class="badge badge-{{ lead.status|lower }}" style="font-size: 12px; padding: 4px 10px;">
+      {{ lead.status.replace('_', ' ') }}
+    </span>
+    {% if lead.reply_detected %}
+      <span class="badge" style="background: var(--green-bg); color: var(--green); font-size: 12px; padding: 4px 10px;">✓ Contact Replied</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="flex gap-16" style="align-items: flex-start;">
+
+  <!-- Left column -->
+  <div style="flex: 2;">
+
+    <!-- Company info -->
+    <div class="card">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;">Company</div>
+      <div class="flex gap-16" style="flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 150px;">
+          <div class="text-muted text-small">Size Tier</div>
+          <div>
+            <span class="badge badge-{{ lead.company.size_tier|lower if lead.company.size_tier else 'smb' }}">
+              {{ lead.company.size_tier or 'SMB' }}
+            </span>
+          </div>
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+          <div class="text-muted text-small">Revenue (est.)</div>
+          <div>{{ lead.company.estimated_revenue or '—' }}</div>
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+          <div class="text-muted text-small">Direction</div>
+          <div>{{ lead.company.expansion_direction or '—' }}</div>
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+          <div class="text-muted text-small">RMC</div>
+          <div>{{ lead.company.rmc_name if lead.company.rmc_detected else '—' }}</div>
+        </div>
+      </div>
+      {% if lead.company.source_snippet %}
+      <div style="margin-top: 12px; padding: 10px; background: var(--surface2); border-radius: 6px; font-size: 12px; color: var(--text-dim);">
+        {{ lead.company.source_snippet }}
+        {% if lead.company.source_url %}
+          <a href="{{ lead.company.source_url }}" target="_blank" style="color: var(--accent); margin-left: 8px;">Source →</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Contact info -->
+    <div class="card">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;">Contact</div>
+      {% if lead.contact %}
+      <div class="flex gap-16" style="flex-wrap: wrap;">
+        <div style="flex: 1;">
+          <div class="text-muted text-small">Name</div>
+          <div style="font-weight: 600;">{{ lead.contact.full_name or '—' }}</div>
+        </div>
+        <div style="flex: 1;">
+          <div class="text-muted text-small">Title</div>
+          <div>{{ lead.contact.title or '—' }}</div>
+        </div>
+        <div style="flex: 1;">
+          <div class="text-muted text-small">Email</div>
+          <div>{{ lead.contact.email or '—' }}</div>
+        </div>
+        <div style="flex: 1;">
+          <div class="text-muted text-small">Phone</div>
+          <div>{{ lead.contact.phone or '—' }}</div>
+        </div>
+        <div style="flex: 1;">
+          <div class="text-muted text-small">Source</div>
+          <div>{{ lead.contact.enrichment_source or '—' }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="text-muted">No contact found yet.</div>
+      {% endif %}
+    </div>
+
+    <!-- Qualification -->
+    <div class="card">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;">Qualification</div>
+      <div class="flex gap-16">
+        <div>
+          <div class="text-muted text-small">Score</div>
+          <div style="font-size: 24px; font-weight: 800; color: {% if lead.qualification_score >= 9 %}var(--green){% elif lead.qualification_score >= 7 %}var(--yellow){% else %}var(--red){% endif %};">
+            {{ lead.qualification_score }}/10
+          </div>
+        </div>
+        <div style="flex: 1;">
+          <div class="text-muted text-small">Reasoning</div>
+          <div style="font-size: 13px;">{{ lead.qualification_reasoning or '—' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Email drafts -->
+    {% if lead.email_drafts %}
+    <div class="card">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;">Email Drafts</div>
+      {% for draft in lead.email_drafts %}
+      <div style="padding: 10px; background: var(--surface2); border-radius: 6px; margin-bottom: 8px;">
+        <div class="flex-between">
+          <div>
+            <span style="font-weight: 600; font-size: 12px;">{{ draft.draft_type.replace('_', ' ') }}</span>
+            <span class="badge" style="background: var(--surface); color: var(--text-dim); margin-left: 6px;">{{ draft.language }}</span>
+          </div>
+          <div class="text-muted text-small">{{ draft.created_in_drafts_at.strftime('%b %d %H:%M') if draft.created_in_drafts_at else '—' }}</div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">{{ draft.subject_line }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Status history -->
+    <div class="card">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;">Status History</div>
+      {% for event in lead.status_history %}
+      <div style="display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border);">
+        <div class="text-muted text-small" style="min-width: 120px;">
+          {{ event.changed_at.strftime('%b %d %H:%M') if event.changed_at else '—' }}
+        </div>
+        <div style="flex: 1;">
+          <span class="badge badge-{{ event.to_status|lower }}">{{ event.to_status.replace('_', ' ') }}</span>
+          <span class="text-muted text-small" style="margin-left: 6px;">by {{ event.changed_by or 'system' }}</span>
+          {% if event.reason %}
+            <div class="text-muted text-small" style="margin-top: 2px;">{{ event.reason }}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <!-- Right column: actions -->
+  <div style="flex: 1; min-width: 240px;">
+
+    <!-- Primary actions -->
+    <div class="card">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;">Actions</div>
+
+      {% if lead.status == 'NEW' %}
+        <form method="POST" action="/leads/{{ lead.id }}/approve" style="margin-bottom: 8px;">
+          <button type="submit" class="btn btn-success" style="width: 100%;">✓ Approve & Create Drafts</button>
+        </form>
+        <form method="POST" action="/leads/{{ lead.id }}/skip">
+          <button type="submit" class="btn btn-danger" style="width: 100%;">✕ Skip Lead</button>
+        </form>
+      {% elif lead.status == 'APPROVED' %}
+        <form method="POST" action="/leads/{{ lead.id }}/mark-sent" style="margin-bottom: 8px;">
+          <button type="submit" class="btn btn-primary" style="width: 100%;">✉ Mark Initial Email Sent</button>
+        </form>
+      {% elif lead.status in ['DRAFTED', 'FOLLOWED_UP_D2', 'FOLLOWED_UP_D5'] %}
+        <form method="POST" action="/leads/{{ lead.id }}/mark-sent">
+          <button type="submit" class="btn btn-primary" style="width: 100%;">✉ Mark Email Sent</button>
+        </form>
+      {% else %}
+        <div class="text-muted text-small">No actions available for this status.</div>
+      {% endif %}
+    </div>
+
+    <!-- Assignment -->
+    <div class="card">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;">Assignment</div>
+      <div class="text-muted text-small" style="margin-bottom: 4px;">Generated by</div>
+      <div style="margin-bottom: 12px; font-size: 13px;">{{ lead.generated_by.full_name }}</div>
+
+      <div class="text-muted text-small" style="margin-bottom: 4px;">Assigned to</div>
+      <form method="POST" action="/leads/{{ lead.id }}/assign">
+        <select name="assigned_to_user_id" style="margin-bottom: 8px;">
+          {% for u in users %}
+            <option value="{{ u.id }}" {% if u.id == lead.assigned_to_user_id %}selected{% endif %}>{{ u.full_name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-ghost btn-sm" style="width: 100%;">Update Assignment</button>
+      </form>
+    </div>
+
+    <!-- Follow-up schedule -->
+    {% if lead.initial_sent_at %}
+    <div class="card">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;">Follow-Up Schedule</div>
+      <div style="font-size: 12px;">
+        <div style="margin-bottom: 6px;">
+          <span class="text-muted">Initial sent:</span> {{ lead.initial_sent_at.strftime('%b %d') }}
+        </div>
+        <div style="margin-bottom: 6px;">
+          <span class="text-muted">Day 2:</span>
+          {{ lead.followup_d2_scheduled.strftime('%b %d') if lead.followup_d2_scheduled else '—' }}
+          {% if lead.followup_d2_sent_at %}<span style="color: var(--green);">✓</span>{% endif %}
+        </div>
+        <div>
+          <span class="text-muted">Day 5:</span>
+          {{ lead.followup_d5_scheduled.strftime('%b %d') if lead.followup_d5_scheduled else '—' }}
+          {% if lead.followup_d5_sent_at %}<span style="color: var(--green);">✓</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

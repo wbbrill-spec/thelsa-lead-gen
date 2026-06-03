@@ -1,0 +1,226 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-06-03",
+    "description": "Search query templates for TMS Corp Lead Gen Engine. MOD-09 selects 8-10 queries per run, avoiding any query used in the previous 3 runs. Variables in {brackets} are substituted at runtime.",
+    "rotation_rules": {
+      "queries_per_run": 8,
+      "avoid_last_n_runs": 3,
+      "recency_filter": "past month"
+    }
+  },
+  "queries": [
+    {
+      "id": "Q01",
+      "template": "Mexican company opening warehouse Texas {year}",
+      "direction": "MX_to_US",
+      "signal_type": "warehouse",
+      "target_region": "Texas"
+    },
+    {
+      "id": "Q02",
+      "template": "Mexico manufacturer expanding United States operations {year}",
+      "direction": "MX_to_US",
+      "signal_type": "manufacturing",
+      "target_region": "US"
+    },
+    {
+      "id": "Q03",
+      "template": "Mexican company new distribution center Houston Dallas {year}",
+      "direction": "MX_to_US",
+      "signal_type": "distribution",
+      "target_region": "Houston Dallas"
+    },
+    {
+      "id": "Q04",
+      "template": "Mexico logistics company US expansion announcement {year}",
+      "direction": "MX_to_US",
+      "signal_type": "logistics",
+      "target_region": "US"
+    },
+    {
+      "id": "Q05",
+      "template": "Mexican food company opening US facility Texas {year}",
+      "direction": "MX_to_US",
+      "signal_type": "food distribution",
+      "target_region": "Texas"
+    },
+    {
+      "id": "Q06",
+      "template": "empresa mexicana expansion Estados Unidos oficina {year}",
+      "direction": "MX_to_US",
+      "signal_type": "office",
+      "target_region": "US",
+      "language": "spanish"
+    },
+    {
+      "id": "Q07",
+      "template": "Mexican staffing company expanding Texas operations {year}",
+      "direction": "MX_to_US",
+      "signal_type": "staffing",
+      "target_region": "Texas"
+    },
+    {
+      "id": "Q08",
+      "template": "Mexico construction company US expansion {year}",
+      "direction": "MX_to_US",
+      "signal_type": "construction",
+      "target_region": "US"
+    },
+    {
+      "id": "Q09",
+      "template": "Mexican company new office San Antonio Laredo El Paso {year}",
+      "direction": "MX_to_US",
+      "signal_type": "office",
+      "target_region": "Border cities"
+    },
+    {
+      "id": "Q10",
+      "template": "US company expanding manufacturing Mexico {year}",
+      "direction": "US_to_MX",
+      "signal_type": "manufacturing",
+      "target_region": "Mexico"
+    },
+    {
+      "id": "Q11",
+      "template": "American company new facility Mexico operations announcement {year}",
+      "direction": "US_to_MX",
+      "signal_type": "facility",
+      "target_region": "Mexico"
+    },
+    {
+      "id": "Q12",
+      "template": "US logistics company expanding Mexico {year}",
+      "direction": "US_to_MX",
+      "signal_type": "logistics",
+      "target_region": "Mexico"
+    },
+    {
+      "id": "Q13",
+      "template": "nearshoring Mexico US company manufacturing expansion {year}",
+      "direction": "US_to_MX",
+      "signal_type": "nearshoring",
+      "target_region": "Mexico"
+    },
+    {
+      "id": "Q14",
+      "template": "US company moving operations Mexico nearshore {year}",
+      "direction": "US_to_MX",
+      "signal_type": "nearshoring",
+      "target_region": "Mexico"
+    },
+    {
+      "id": "Q15",
+      "template": "company opening maquiladora Mexico border {year}",
+      "direction": "US_to_MX",
+      "signal_type": "maquiladora",
+      "target_region": "Border"
+    },
+    {
+      "id": "Q16",
+      "template": "cross border expansion US Mexico business announcement {year}",
+      "direction": "BOTH",
+      "signal_type": "general expansion",
+      "target_region": "Border"
+    },
+    {
+      "id": "Q17",
+      "template": "Mexican company acquires US company Texas {year}",
+      "direction": "MX_to_US",
+      "signal_type": "acquisition",
+      "target_region": "Texas"
+    },
+    {
+      "id": "Q18",
+      "template": "US company acquires Mexico operations expansion {year}",
+      "direction": "US_to_MX",
+      "signal_type": "acquisition",
+      "target_region": "Mexico"
+    },
+    {
+      "id": "Q19",
+      "template": "Mexico company press release new US office employees {year}",
+      "direction": "MX_to_US",
+      "signal_type": "press release",
+      "target_region": "US"
+    },
+    {
+      "id": "Q20",
+      "template": "cross border relocation corporate employees US Mexico {year}",
+      "direction": "BOTH",
+      "signal_type": "relocation",
+      "target_region": "Border"
+    },
+    {
+      "id": "Q21",
+      "template": "Mexican auto parts manufacturer Texas expansion {year}",
+      "direction": "MX_to_US",
+      "signal_type": "manufacturing",
+      "target_region": "Texas"
+    },
+    {
+      "id": "Q22",
+      "template": "Mexico company LinkedIn announcement new US location {year}",
+      "direction": "MX_to_US",
+      "signal_type": "LinkedIn",
+      "target_region": "US"
+    },
+    {
+      "id": "Q23",
+      "template": "US manufacturer Mexico plant expansion Monterrey Juarez {year}",
+      "direction": "US_to_MX",
+      "signal_type": "manufacturing",
+      "target_region": "Monterrey Juarez"
+    },
+    {
+      "id": "Q24",
+      "template": "Mexican company new hires Texas business filing {year}",
+      "direction": "MX_to_US",
+      "signal_type": "business filing",
+      "target_region": "Texas"
+    },
+    {
+      "id": "Q25",
+      "template": "empresa expansion Texas almacen empleados {year}",
+      "direction": "MX_to_US",
+      "signal_type": "warehouse",
+      "target_region": "Texas",
+      "language": "spanish"
+    },
+    {
+      "id": "Q26",
+      "template": "US food distribution company expanding Mexico {year}",
+      "direction": "US_to_MX",
+      "signal_type": "food distribution",
+      "target_region": "Mexico"
+    },
+    {
+      "id": "Q27",
+      "template": "Mexican company registered Texas Secretary of State {year}",
+      "direction": "MX_to_US",
+      "signal_type": "business filing",
+      "target_region": "Texas"
+    },
+    {
+      "id": "Q28",
+      "template": "cross border supply chain expansion announcement Mexico Texas {year}",
+      "direction": "BOTH",
+      "signal_type": "supply chain",
+      "target_region": "Texas Mexico"
+    },
+    {
+      "id": "Q29",
+      "template": "Mexico company opening US headquarters corporate relocation {year}",
+      "direction": "MX_to_US",
+      "signal_type": "headquarters",
+      "target_region": "US"
+    },
+    {
+      "id": "Q30",
+      "template": "US company employees relocating Mexico new operations {year}",
+      "direction": "US_to_MX",
+      "signal_type": "relocation",
+      "target_region": "Mexico"
+    }
+  ]
+}
