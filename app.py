@@ -39,6 +39,7 @@ from web_auth import WebAuthFlow, WebAuthError
 # ── App setup ──────────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
+create_all_tables()  # runs on gunicorn import — creates tables if they don't exist
 app.secret_key = config.FLASK_SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
 
@@ -99,17 +100,25 @@ def auth_callback():
         flash(f"Sign-in failed: {exc}", "error")
         return redirect(url_for("login"))
 
-    # Auto-create user on first login - open to anyone with a Google account
+    # Auto-create user on first login — open to anyone with a Google account
     email = user_info.get("email", "").lower()
     name = user_info.get("name", email)
     with get_db() as db:
         user = db.query(User).filter(
             (User.email_gmail == email) | (User.email_outlook == email),
         ).first()
+
         if not user:
-            user = User(full_name=name, email_gmail=email, oauth_provider="google", is_active=True)
+            user = User(
+                full_name=name,
+                email_gmail=email,
+                oauth_provider="google",
+                is_active=True,
+            )
             db.add(user)
             db.flush()
+
+        # Store token for scheduler access
         user.oauth_token = creds.to_json()
         user.oauth_provider = "google"
         if not user.email_gmail:
@@ -422,8 +431,6 @@ def health():
 
 def create_app():
     create_all_tables()
-    from seed import seed
-    seed()
     return app
 
 
