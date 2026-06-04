@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 
+from sqlalchemy.orm import joinedload
 from flask import (
     Flask, flash, jsonify, redirect,
     render_template, request, session, url_for,
@@ -152,7 +153,7 @@ def dashboard():
         pending_statuses = [Lead.STATUS_NEW, Lead.STATUS_APPROVED]
         pending_leads = (
             db.query(Lead)
-            .join(Company)
+            .options(joinedload(Lead.company), joinedload(Lead.contact), joinedload(Lead.assigned_to), joinedload(Lead.generated_by))
             .filter(Lead.status.in_(pending_statuses))
             .order_by(Lead.created_at.desc())
             .all()
@@ -204,6 +205,7 @@ def all_leads():
         if assigned_filter:
             q = q.filter(Lead.assigned_to_user_id == int(assigned_filter))
 
+        q = q.options(joinedload(Lead.company), joinedload(Lead.contact), joinedload(Lead.assigned_to), joinedload(Lead.generated_by))
         leads = q.order_by(Lead.created_at.desc()).all()
         users = db.query(User).filter_by(is_active=True).all()
 
