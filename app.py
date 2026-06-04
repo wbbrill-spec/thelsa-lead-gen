@@ -422,6 +422,11 @@ def run_pipeline():
 
 # ── Routes: Utility ────────────────────────────────────────────────────────────
 
+@app.route("/trigger")
+def trigger():
+    """Entry point from Thelsa Library — redirect to dashboard."""
+    return redirect(url_for("dashboard"))
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "service": "tms-leadgen"})
