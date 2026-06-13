@@ -211,25 +211,50 @@ def _web_search_contact(
 
 {results_text}
 
+These results often come from LinkedIn profile snippets formatted like:
+"FirstName LastName - Title at Company | bio text..."
+Treat any named individual whose snippet places them at {company_name} (or a clear
+subsidiary/division of it) as a usable contact, even if their title isn't an exact
+match for {role_hint} — a real name at the company is far more useful than nothing.
+Prefer the most senior or most operationally relevant person if multiple appear.
+
 Respond with ONLY a JSON object:
 {{"full_name": "Jane Smith", "title": "Supply Chain Manager", "email": "jane@company.com", "phone": "+1-555-0000"}}
 
-If you cannot find a real contact, return:
+Only return all-empty values if NONE of the results name a real person associated with {company_name}:
 {{"full_name": "", "title": "", "email": "", "phone": ""}}"""
 
     try:
         import anthropic
         import config
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=150,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        text = message.content[0].text.strip()
-        text = re.sub(r"^```json\s*", "", text)
-        text = re.sub(r"```$", "", text).strip()
-        data = json.loads(text)
+
+        def _ask(p: str) -> dict:
+            message = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=150,
+                temperature=0,
+                messages=[{"role": "user", "content": p}]
+            )
+            text = message.content[0].text.strip()
+            text = re.sub(r"^```json\s*", "", text)
+            text = re.sub(r"```$", "", text).strip()
+            return json.loads(text)
+
+        data = _ask(prompt)
+
+        # Retry once with a more permissive nudge if the first pass came back empty
+        # but the search results clearly contain named individuals — the model is
+        # sometimes overly conservative on the first attempt.
+        if not data.get("full_name") and not data.get("email"):
+            retry_prompt = prompt + (
+                "\n\nReminder: if any search result snippet contains a person's "
+                "full name associated with this company, extract them — do not "
+                "return all-empty unless every result is generic company/job-board "
+                "content with no named individual."
+            )
+            data = _ask(retry_prompt)
+
         data["enrichment_source"] = "web_search"
         data["enrichment_raw"] = None
         return data
