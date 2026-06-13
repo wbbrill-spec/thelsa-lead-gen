@@ -274,8 +274,12 @@ class DiscoveryRun(Base):
 # ── Database helpers ───────────────────────────────────────────────────────────
 
 def get_engine():
-    return create_engine(config.DATABASE_URL, echo=False)
-
+    return create_engine(
+              config.DATABASE_URL,
+              echo=False,
+              pool_pre_ping=True,
+              pool_recycle=280,
+    )
 
 def create_all_tables():
     """Create all tables. Safe to call multiple times (no-op if tables exist)."""
