@@ -102,7 +102,7 @@ or
         import config
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=150,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -150,7 +150,7 @@ or
         import config
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=100,
             messages=[{"role": "user", "content": prompt}]
         )
