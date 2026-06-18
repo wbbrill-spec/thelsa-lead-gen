@@ -234,7 +234,19 @@ def lead_detail(lead_id: int):
         return redir
 
     with get_db() as db:
-        lead = db.query(Lead).filter_by(id=lead_id).first()
+        lead = (
+            db.query(Lead)
+            .options(
+                joinedload(Lead.company),
+                joinedload(Lead.contact),
+                joinedload(Lead.email_drafts),
+                joinedload(Lead.status_history),
+                joinedload(Lead.assigned_to),
+                joinedload(Lead.generated_by),
+            )
+            .filter_by(id=lead_id)
+            .first()
+        )
         if not lead:
             flash("Lead not found.", "error")
             return redirect(url_for("dashboard"))
