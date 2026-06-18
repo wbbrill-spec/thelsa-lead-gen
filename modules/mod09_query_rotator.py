@@ -17,8 +17,8 @@ _QUERIES_PER_RUN = 8
 _AVOID_LAST_N_RUNS = 3
 
 
-def get_queries_for_run() -> list[str]:
-    """Return a set of query strings for the current run.
+def get_queries_for_run() -> list[tuple[str, str]]:
+    """Return a set of (id, query_string) tuples for the current run.
 
     Avoids queries used in the previous 3 runs.
     Substitutes current year into {year} placeholders.
@@ -101,6 +101,6 @@ def _select_balanced(bank: list[dict], available: dict, n: int, year: str) -> li
         extra = random.sample(leftover, min(remaining, len(leftover)))
         selected_ids.extend([q["id"] for q in extra])
 
-    # Build final query strings
+    # Build final (id, query_string) tuples
     id_to_template = {q["id"]: q["template"] for q in bank}
-    return [id_to_template[qid].replace("{year}", year) for qid in selected_ids[:n]]
+    return [(qid, id_to_template[qid].replace("{year}", year)) for qid in selected_ids[:n]]

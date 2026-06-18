@@ -33,17 +33,17 @@ def run_discovery(run_id: int) -> list[RawCandidate]:
     Returns:
         List of RawCandidate objects, deduplicated by domain within this run
     """
-    queries = get_queries_for_run()
+    query_pairs = get_queries_for_run()  # list of (id, query_string)
     all_results: list[SearchResult] = []
 
-    for query in queries:
-        results = search(query, num_results=10, recency_days=30)
+    for qid, query in query_pairs:
+        results = search(query, num_results=10, recency_days=180)
         for r in results:
             r._query = query  # tag with originating query
         all_results.extend(results)
 
-    # Update discovery run with queries used
-    _update_run_queries(run_id, queries)
+    # Update discovery run with queries used (store IDs for proper rotation)
+    _update_run_queries(run_id, query_pairs)
 
     # Extract candidates from search results
     candidates = _extract_candidates(all_results)
@@ -64,10 +64,18 @@ def _extract_candidates(results: list[SearchResult]) -> list[RawCandidate]:
     if not results:
         return []
 
-    # Build a compact summary of results for Claude
+    # Deduplicate results by URL (same article can appear from multiple queries)
+    seen_urls: set[str] = set()
+    unique_results: list[SearchResult] = []
+    for r in results:
+        if r.url and r.url not in seen_urls:
+            seen_urls.add(r.url)
+            unique_results.append(r)
+
+    # Build a compact summary of results for Claude (up to 50 unique results)
     results_text = "\n\n".join([
         f"RESULT {i+1}:\nTitle: {r.title}\nURL: {r.url}\nSnippet: {r.snippet}\nDate: {r.date}"
-        for i, r in enumerate(results[:20])
+        for i, r in enumerate(unique_results[:50])
     ])
 
     prompt = f"""You are analyzing web search results to find companies with active US-Mexico cross-border expansion.
@@ -84,7 +92,14 @@ For each company you identify with clear cross-border expansion signals, extract
 - source_url: the URL this was found at
 - source_snippet: a brief excerpt (max 100 words) describing the expansion
 
-Only include companies with CLEAR, SPECIFIC expansion signals (opening a facility, new office, warehouse, hiring in the other country). Do not include vague or speculative mentions.
+Include companies with clear cross-border expansion signals. Qualifying signals:
+- Opening a facility, office, warehouse, plant, or distribution center in the other country
+- Significant hiring or employee transfers for physical operations in the other country
+- Nearshoring or manufacturing relocation projects establishing physical presence
+- Acquiring or partnering to create physical operations in the other country
+- Registering a subsidiary or legal entity to operate physically in the other country
+
+Do NOT include: general industry/trade trend articles with no specific company, financial-only operations (no physical footprint), or import/export trade without physical cross-border operations.
 
 Respond with ONLY a JSON array. No preamble, no markdown, no explanation.
 Example format:
@@ -108,7 +123,7 @@ If no qualifying companies are found, return an empty array: []"""
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2000,
+            max_tokens=4000,
             messages=[{"role": "user", "content": prompt}]
         )
         response_text = message.content[0].text.strip()
@@ -140,15 +155,15 @@ If no qualifying companies are found, return an empty array: []"""
         return []
 
 
-def _update_run_queries(run_id: int, queries: list[str]):
-    """Store the queries used in this run."""
+def _update_run_queries(run_id: int, query_pairs: list[tuple[str, str]]):
+    """Store the queries used in this run (with IDs for proper rotation)."""
     try:
         from db import get_db
         from models import DiscoveryRun
         with get_db() as db:
             run = db.query(DiscoveryRun).filter_by(id=run_id).first()
             if run:
-                run.search_queries_used = [{"query": q} for q in queries]
+                run.search_queries_used = [{"id": qid, "query": q} for qid, q in query_pairs]
                 run.companies_discovered = 0  # will be updated by MOD-02
     except Exception as e:
         print(f"[MOD-01] Failed to update run queries: {e}")

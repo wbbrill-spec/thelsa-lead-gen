@@ -47,12 +47,20 @@ def _search_serpapi(query: str, num_results: int, recency_days: int) -> list[Sea
     if not config.SEARCH_API_KEY:
         return _mock_search_results(query)
 
+    # Map recency_days to Google's tbs parameter
+    if recency_days <= 7:
+        tbs = "qdr:w"      # past week
+    elif recency_days <= 30:
+        tbs = "qdr:m"      # past month
+    else:
+        tbs = "qdr:y"      # past year (covers 90, 180, 365 day requests)
+
     params = {
         "q": query,
         "api_key": config.SEARCH_API_KEY,
         "num": min(num_results, 10),
         "engine": "google",
-        "tbs": f"qdr:m",  # past month
+        "tbs": tbs,
     }
 
     for attempt in range(3):
