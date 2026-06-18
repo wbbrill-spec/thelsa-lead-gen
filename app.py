@@ -234,19 +234,7 @@ def lead_detail(lead_id: int):
         return redir
 
     with get_db() as db:
-        lead = (
-            db.query(Lead)
-            .options(
-                joinedload(Lead.company),
-                joinedload(Lead.contact),
-                joinedload(Lead.assigned_to),
-                joinedload(Lead.generated_by),
-                joinedload(Lead.email_drafts),
-                joinedload(Lead.status_history),
-            )
-            .filter_by(id=lead_id)
-            .first()
-        )
+        lead = db.query(Lead).filter_by(id=lead_id).first()
         if not lead:
             flash("Lead not found.", "error")
             return redirect(url_for("dashboard"))
@@ -408,8 +396,8 @@ def run_pipeline():
         from modules.mod05_enricher import enrich_contacts
 
         candidates = run_discovery(run_id=run_id)
-        net_new = deduplicate(candidates)
-        qualified = score_candidates(net_new)
+        net_new = deduplicate(candidates, run_id=run_id)
+        qualified = score_candidates(net_new, run_id=run_id)
         segmented = segment_and_detect_rmc(qualified)
         enrich_contacts(segmented, run_id=run_id, generated_by_user_id=session["user_id"])
 
