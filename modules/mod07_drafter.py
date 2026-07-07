@@ -486,3 +486,50 @@ def _save_draft(
         db.add(draft)
         db.flush()
         return draft.id
+
+
+def create_initial_outlook_draft(lead_id: int, mailbox: str, language: str = "EN") -> int:
+    """Generate the INITIAL outreach email and create it as a draft in ``mailbox``'s
+    Outlook Drafts folder via Microsoft Graph. Reuses the same Claude-generated
+    content as the Gmail path; only the delivery differs. Drafts only — never sends.
+
+    Returns the EmailDraft DB id.
+    """
+    from modules.graph_outlook import create_outlook_draft
+
+    with get_db() as db:
+        lead = db.query(Lead).filter_by(id=lead_id).first()
+        if not lead:
+            raise ValueError(f"Lead {lead_id} not found")
+        ctx = _build_context(lead, lead.company, lead.contact)
+        to_email = lead.contact.email if lead.contact else ""
+
+    subject, body = _generate_email(ctx, "INITIAL", language)
+    result = create_outlook_draft(
+        mailbox=mailbox,
+        to_email=to_email,
+        subject=subject,
+        body=body,
+    )
+    return _save_draft(lead_id, "INITIAL", language, subject, body, result.get("id", ""), "outlook")
+
+
+def draft_on_assign(lead_id: int, mailbox: str, rep_name: str, changed_by: str) -> None:
+    """Called when a lead is assigned to a rep: create the INITIAL outreach draft in
+    that rep's thelsa.com Outlook Drafts and mark the lead DRAFTED. Never raises —
+    logs on failure so it can never break the assign action or the dashboard.
+    """
+    mailbox = (mailbox or "").strip()
+    if not mailbox:
+        print(f"[MOD-07] draft_on_assign: no Outlook address on file for {rep_name}; skipped.")
+        return
+    try:
+        create_initial_outlook_draft(lead_id=lead_id, mailbox=mailbox, language="EN")
+        with get_db() as db:
+            lead = db.query(Lead).filter_by(id=lead_id).first()
+            if lead:
+                from models import transition_status
+                transition_status(db, lead, Lead.STATUS_DRAFTED, changed_by,
+                                  f"Outlook draft created for {rep_name}")
+    except Exception as exc:
+        print(f"[MOD-07] draft_on_assign failed for lead {lead_id} / {mailbox}: {exc}")
