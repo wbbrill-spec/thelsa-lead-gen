@@ -350,6 +350,8 @@ def assign_lead(lead_id: int):
         db.add(note)
 
     flash(f"Lead assigned to {new_user.full_name}.", "success")
+    from modules.mod07_drafter import draft_on_assign
+    draft_on_assign(lead.id, new_user.email_outlook, new_user.full_name, session["user_name"])
     return redirect(url_for("lead_detail", lead_id=lead_id))
 
 
