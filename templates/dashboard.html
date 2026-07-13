@@ -11,9 +11,9 @@
     </h1>
     <div class="text-muted text-small mt-8">
       {% if view == 'pending' %}
-        Leads waiting for your review and approval.
+      Leads waiting for your review and approval.
       {% else %}
-        {{ leads|length }} leads total.
+      {{ leads|length }} leads total.
       {% endif %}
     </div>
   </div>
@@ -53,7 +53,7 @@
       <select name="status">
         <option value="">All</option>
         {% for s in all_statuses %}
-          <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s.replace('_', ' ') }}</option>
+        <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s.replace('_', ' ') }}</option>
         {% endfor %}
       </select>
     </div>
@@ -92,7 +92,7 @@
       <select name="assigned_to">
         <option value="">All</option>
         {% for u in users %}
-          <option value="{{ u.id }}" {% if filters.assigned_to == u.id|string %}selected{% endif %}>{{ u.full_name }}</option>
+        <option value="{{ u.id }}" {% if filters.assigned_to == u.id|string %}selected{% endif %}>{{ u.full_name }}</option>
         {% endfor %}
       </select>
     </div>
@@ -116,7 +116,7 @@
         <th>Score</th>
         <th>Status</th>
         <th>Assigned To</th>
-                <th>Sent To</th>
+        <th>Sent To</th>
         <th>Discovered</th>
         <th></th>
       </tr>
@@ -130,16 +130,21 @@
             {{ lead.company.country_of_origin }} → {{ 'US' if lead.company.country_of_origin == 'MX' else 'MX' }}
             · {{ lead.company.industry or '—' }}
           </div>
+          {% if lead.company.domain %}
+          <div class="text-small">
+            <a href="https://{{ lead.company.domain }}" target="_blank" rel="noopener">{{ lead.company.domain }}</a>
+          </div>
+          {% endif %}
           {% if lead.reply_detected %}
-            <span class="badge" style="background: var(--green-bg); color: var(--green); margin-top: 4px;">✓ Replied</span>
+          <span class="badge" style="background: var(--green-bg); color: var(--green); margin-top: 4px;">✓ Replied</span>
           {% endif %}
         </td>
         <td>
           {% if lead.contact %}
-            <div>{{ lead.contact.full_name or '—' }}</div>
-            <div class="text-muted text-small">{{ lead.contact.title or '' }}</div>
+          <div>{{ lead.contact.full_name or '—' }}</div>
+          <div class="text-muted text-small">{{ lead.contact.title or '' }}</div>
           {% else %}
-            <span class="text-muted">—</span>
+          <span class="text-muted">—</span>
           {% endif %}
         </td>
         <td>
@@ -147,7 +152,7 @@
             {{ lead.company.size_tier or 'SMB' }}
           </span>
           {% if lead.company.rmc_detected %}
-            <div class="text-small text-muted" style="margin-top: 2px;">{{ lead.company.rmc_name }}</div>
+          <div class="text-small text-muted" style="margin-top: 2px;">{{ lead.company.rmc_name }}</div>
           {% endif %}
         </td>
         <td>
@@ -159,15 +164,15 @@
           <span class="badge badge-{{ lead.status|lower }}">{{ lead.status.replace('_', ' ') }}</span>
         </td>
         <td class="text-small">{{ lead.assigned_to.full_name }}</td>
-                <td class="text-small">
-                  {% if lead.sent_to_email %}
-                    <div>{{ lead.sent_to_name or lead.sent_to_email }}</div>
-                    <div class="text-muted text-small">{{ lead.sent_to_email }}</div>
-                    {% if lead.initial_sent_at %}<div class="text-muted text-small">sent {{ lead.initial_sent_at.strftime('%b %d') }}</div>{% endif %}
-                  {% else %}
-                    <span class="text-muted">—</span>
-                  {% endif %}
-                </td>
+        <td class="text-small">
+          {% if lead.sent_to_email %}
+          <div>{{ lead.sent_to_name or lead.sent_to_email }}</div>
+          <div class="text-muted text-small">{{ lead.sent_to_email }}</div>
+          {% if lead.initial_sent_at %}<div class="text-muted text-small">sent {{ lead.initial_sent_at.strftime('%b %d') }}</div>{% endif %}
+          {% else %}
+          <span class="text-muted">—</span>
+          {% endif %}
+        </td>
         <td class="text-muted text-small">
           {{ lead.created_at.strftime('%b %d') if lead.created_at else '—' }}
         </td>
@@ -181,9 +186,9 @@
   {% else %}
   <div style="text-align: center; padding: 48px; color: var(--text-muted);">
     {% if view == 'pending' %}
-      No leads pending action. Run Discovery to find new leads.
+    No leads pending action. Run Discovery to find new leads.
     {% else %}
-      No leads found matching your filters.
+    No leads found matching your filters.
     {% endif %}
   </div>
   {% endif %}
