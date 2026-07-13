@@ -116,6 +116,7 @@
         <th>Score</th>
         <th>Status</th>
         <th>Assigned To</th>
+                <th>Sent To</th>
         <th>Discovered</th>
         <th></th>
       </tr>
@@ -158,6 +159,15 @@
           <span class="badge badge-{{ lead.status|lower }}">{{ lead.status.replace('_', ' ') }}</span>
         </td>
         <td class="text-small">{{ lead.assigned_to.full_name }}</td>
+                <td class="text-small">
+                  {% if lead.sent_to_email %}
+                    <div>{{ lead.sent_to_name or lead.sent_to_email }}</div>
+                    <div class="text-muted text-small">{{ lead.sent_to_email }}</div>
+                    {% if lead.initial_sent_at %}<div class="text-muted text-small">sent {{ lead.initial_sent_at.strftime('%b %d') }}</div>{% endif %}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
         <td class="text-muted text-small">
           {{ lead.created_at.strftime('%b %d') if lead.created_at else '—' }}
         </td>
