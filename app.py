@@ -443,6 +443,19 @@ def trigger():
     """Entry point from Thelsa Library — redirect to dashboard."""
     return redirect(url_for("dashboard"))
 
+@app.route("/cron/run", methods=["GET", "POST"])
+def cron_run():
+    """Token-guarded trigger for the daily scheduler cycle (called by a Render Cron Job)."""
+    import os
+    import threading
+    token = os.environ.get("CRON_TOKEN", "")
+    if not token or request.args.get("token") != token:
+        return ("forbidden", 403)
+    import scheduler
+    threading.Thread(target=scheduler.run_cycle, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "service": "tms-leadgen"})
