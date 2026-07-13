@@ -7,6 +7,16 @@ APPROVED / DRAFTED --(sent detected)--> DRAFTED (initial_sent_at set)
 DRAFTED --(Day-2 working)--> FOLLOWED_UP_D2
 FOLLOWED_UP_D2 --(Day-5 working)--> FOLLOWED_UP_D5
 any --(reply)--> RESPONDED (stops follow-ups)
+
+Two sent-detection paths:
+- Legacy leads still assigned to "Bill Brill" were manually handed to Armando/
+  Gustavo before the assign->draft flow existed. We confirm them by scanning the
+  reps' Sent folders (last 60 days) for a message whose recipient email domain
+  matches the lead's company website domain. On a match we record who/when,
+  reassign the lead to that rep, and start the follow-up cadence. If no rep
+  outreach is found, the lead is flagged NO_OUTREACH so it can be chased.
+- Leads assigned directly to a rep (the current flow) are matched by the initial
+  draft's subject OR recipient in that rep's Sent folder.
 """
 from __future__ import annotations
 
@@ -15,8 +25,11 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 from db import get_db
-from models import Lead, EmailDraft, transition_status
+from models import Lead, EmailDraft, User, transition_status
 from modules.graph_outlook import GRAPH, _token
+
+NO_OUTREACH = "NO_OUTREACH"
+LEGACY_ASSIGNEE = "Bill Brill"
 
 
 def _get(url: str) -> dict:
@@ -32,6 +45,18 @@ def _parse(s):
         return datetime.fromisoformat(s.replace("Z", "+00:00"))
     except Exception:
         return None
+
+
+def _domain_of(value: str) -> str:
+    """Reduce an email address or URL to a bare, comparable hostname."""
+    s = (value or "").strip().lower()
+    if "@" in s:
+        s = s.split("@", 1)[1]
+    s = s.replace("https://", "").replace("http://", "")
+    s = s.split("/")[0].strip()
+    if s.startswith("www."):
+        s = s[4:]
+    return s
 
 
 def _add_working_days(dt: datetime, n: int) -> datetime:
@@ -64,11 +89,21 @@ def _list_folder(mailbox: str, folder: str, date_field: str, since_iso: str) -> 
         return items
 
 
+def _recip_matching_domain(msg: dict, company_domain: str) -> dict:
+    """Return the recipient emailAddress dict whose domain matches, else {}."""
+    for rcp in (msg.get("toRecipients") or []):
+        ea = (rcp.get("emailAddress") or {})
+        if company_domain and _domain_of(ea.get("address") or "") == company_domain:
+            return ea
+    return {}
+
+
 def run_outlook_tracking() -> dict:
     now = datetime.now(timezone.utc)
     # 90-day look-back so past leads (not just the last 3 weeks) get backfilled.
     since = (now - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    stats = {"sent": 0, "replies": 0, "d2": 0, "d5": 0, "errors": 0}
+    cutoff_60 = now - timedelta(days=60)  # legacy manual-handoff window
+    stats = {"sent": 0, "replies": 0, "d2": 0, "d5": 0, "no_outreach": 0, "errors": 0}
 
     sent_cache: dict = {}
     inbox_cache: dict = {}
@@ -83,28 +118,43 @@ def run_outlook_tracking() -> dict:
             inbox_cache[mb] = _list_folder(mb, "Inbox", "receivedDateTime", since)
         return inbox_cache[mb]
 
-    # 1) SENT DETECTION — match the initial draft's subject OR recipient in the rep's Sent folder
+    # Rep mailboxes (everyone with an Outlook mailbox who is not the legacy assignee).
+    with get_db() as db:
+        reps = [(u.id, (u.email_outlook or "").strip().lower())
+                for u in db.query(User).filter(User.is_active == True,
+                                               User.email_outlook.isnot(None)).all()
+                if (u.full_name or "").strip() != LEGACY_ASSIGNEE and (u.email_outlook or "").strip()]
+
+    # 1) SENT DETECTION — split candidates into legacy (Bill) vs. direct (rep-assigned)
     with get_db() as db:
         cands = (
             db.query(Lead)
             .filter(Lead.initial_sent_at.is_(None),
-                    Lead.status.in_([Lead.STATUS_APPROVED, Lead.STATUS_DRAFTED]))
+                    Lead.status.in_([Lead.STATUS_APPROVED, Lead.STATUS_DRAFTED, NO_OUTREACH]))
             .all()
         )
-        rows = []
+        legacy_rows = []   # (lead_id, company_domain)
+        direct_rows = []   # (lead_id, mailbox, subject, to_addr)
         for lead in cands:
             u = lead.assigned_to
-            mb = (u.email_outlook or "").strip().lower() if u else ""
-            d = (db.query(EmailDraft)
-                 .filter_by(lead_id=lead.id, draft_type="INITIAL", language="EN", provider="outlook")
-                 .first())
-            to_addr = (lead.contact.email or "").strip().lower() if (lead.contact and lead.contact.email) else ""
-            if mb and d and d.subject_line:
-                rows.append((lead.id, mb, d.subject_line.strip().lower(), to_addr))
-    for lead_id, mb, subj, to_addr in rows:
+            assignee = (u.full_name or "").strip() if u else ""
+            if assignee == LEGACY_ASSIGNEE:
+                cdom = _domain_of(lead.company.domain) if lead.company else ""
+                if cdom:
+                    legacy_rows.append((lead.id, cdom))
+            else:
+                mb = (u.email_outlook or "").strip().lower() if u else ""
+                d = (db.query(EmailDraft)
+                     .filter_by(lead_id=lead.id, draft_type="INITIAL", language="EN", provider="outlook")
+                     .first())
+                to_addr = (lead.contact.email or "").strip().lower() if (lead.contact and lead.contact.email) else ""
+                if mb and d and d.subject_line:
+                    direct_rows.append((lead.id, mb, d.subject_line.strip().lower(), to_addr))
+
+    # 1a) DIRECT — match the initial draft's subject OR recipient in the rep's Sent folder
+    for lead_id, mb, subj, to_addr in direct_rows:
         try:
             def _matches(m, subj=subj, to_addr=to_addr):
-                # Primary: exact subject match. Fallback: same recipient (covers edited subjects).
                 if (m.get("subject") or "").strip().lower() == subj:
                     return True
                 if to_addr:
@@ -132,6 +182,45 @@ def run_outlook_tracking() -> dict:
         except Exception as e:
             stats["errors"] += 1
             print(f"[MOD-11] sent-detect error lead {lead_id}: {e}")
+
+    # 1b) LEGACY — confirm a rep emailed the company (recipient domain == company domain), last 60 days
+    for lead_id, cdom in legacy_rows:
+        try:
+            best = None  # (sent_dt, msg, mailbox, user_id, recipient)
+            for uid, mb in reps:
+                for m in sent_for(mb):
+                    sdt = _parse(m.get("sentDateTime"))
+                    if sdt and sdt < cutoff_60:
+                        continue
+                    ea = _recip_matching_domain(m, cdom)
+                    if ea:
+                        key = sdt or now
+                        if best is None or key < best[0]:
+                            best = (key, m, mb, uid, ea)
+            if best is None:
+                with get_db() as db:
+                    lead = db.query(Lead).filter_by(id=lead_id).first()
+                    if lead and lead.status != NO_OUTREACH:
+                        transition_status(db, lead, NO_OUTREACH, "system",
+                                          f"No rep outreach to {cdom} found in last 60 days")
+                        stats["no_outreach"] += 1
+                continue
+            sent_dt, m, mb, uid, ea = best
+            with get_db() as db:
+                lead = db.query(Lead).filter_by(id=lead_id).first()
+                lead.initial_sent_at = sent_dt
+                lead.sent_to_email = ea.get("address")
+                lead.sent_to_name = ea.get("name")
+                lead.sent_conversation_id = m.get("conversationId")
+                lead.assigned_to_user_id = uid  # reassign to the rep who actually emailed the prospect
+                lead.followup_d2_scheduled = _add_working_days(sent_dt, 2)
+                lead.followup_d5_scheduled = _add_working_days(sent_dt, 5)
+                transition_status(db, lead, Lead.STATUS_DRAFTED, "system",
+                                  f"Confirmed outreach to {ea.get('address') or cdom} from {mb}; reassigned from {LEGACY_ASSIGNEE}")
+            stats["sent"] += 1
+        except Exception as e:
+            stats["errors"] += 1
+            print(f"[MOD-11] legacy sent-detect error lead {lead_id}: {e}")
 
     # 2) REPLY DETECTION — same conversation, or a message from the recipient
     with get_db() as db:
