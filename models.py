@@ -178,6 +178,9 @@ class Lead(Base):
     followup_d2_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     followup_d5_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     call_required_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_to_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    sent_to_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    sent_conversation_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
