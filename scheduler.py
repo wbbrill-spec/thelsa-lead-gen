@@ -1,13 +1,13 @@
-"""Standalone scheduler process for TMS Lead Gen Engine.
+"""Standalone scheduler cycle for the TMS Lead Gen Engine.
 
-Runs as a Render Background Worker (see render.yaml). Once per day (~9am Central)
-it:
+Run once per invocation (by a Render Cron Job) — or in a loop by a worker.
+Each cycle it:
   1. Runs lead discovery so new leads flow into the dashboard.
-  2. Runs the follow-up scheduler (Day-2 / Day-5 drafts, reply detection).
+  2. Runs Outlook tracking: detect sent emails & replies, and create the
+     working-day Day-2 / Day-5 follow-up drafts (modules.mod11_outlook_tracker).
   3. Emails Bill a morning summary of how many new leads await assignment.
 
-Every step is wrapped so a failure in one never stops the others or crashes the
-worker.
+Every step is wrapped so a failure in one never stops the others.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# Run once per day at ~14:00 UTC (about 9am US Central during CDT).
+# When run as a loop (worker), fire once per day at ~14:00 UTC (~9am US Central).
 _RUN_HOUR_UTC = 14
 
 ALERT_TO = ["wbbrill@gmail.com"]
@@ -31,7 +31,6 @@ ALERT_CC = ["bill.brill@inflectionpointnow.com"]
 
 
 def _system_user_id(db):
-    """A user to attribute the automated discovery run to (defaults to Bill)."""
     from models import User
     u = (
         db.query(User).filter(User.email_gmail == "wbbrill@gmail.com").first()
@@ -41,7 +40,6 @@ def _system_user_id(db):
 
 
 def run_discovery():
-    """Run the full discovery pipeline once (mirrors the dashboard's Run Discovery)."""
     from db import get_db
     from models import DiscoveryRun
 
@@ -99,7 +97,6 @@ def _count_leads():
 
 
 def send_morning_alert(new_today, pending):
-    """Email a summary to Bill via the stored Gmail credentials (drafts scope allows send)."""
     from db import get_db
     from models import User
     from web_auth import WebAuthFlow
@@ -155,20 +152,14 @@ def run_cycle():
     except Exception as e:
         log.error("Discovery step failed: %s", e, exc_info=True)
 
-    log.info("Running follow-up scheduler...")
+    log.info("Running Outlook tracking (sent / replies / follow-ups)...")
     try:
-        from modules.mod06_scheduler import run_scheduler
-        result = run_scheduler()
-        log.info(
-            "Follow-ups complete — D2: %s, D5: %s, replies: %s, calls: %s, errors: %s",
-            result.d2_drafts_created,
-            result.d5_drafts_created,
-            result.replies_detected,
-            result.call_required_sent,
-            len(result.errors),
-        )
+        from modules.mod11_outlook_tracker import run_outlook_tracking
+        r = run_outlook_tracking()
+        log.info("Outlook tracking — sent: %s, replies: %s, D2: %s, D5: %s, errors: %s",
+                 r.get("sent"), r.get("replies"), r.get("d2"), r.get("d5"), r.get("errors"))
     except Exception as e:
-        log.error("Follow-up scheduler failed: %s", e, exc_info=True)
+        log.error("Outlook tracking failed: %s", e, exc_info=True)
 
     log.info("Sending morning alert...")
     try:
