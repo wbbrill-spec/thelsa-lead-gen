@@ -3,10 +3,10 @@ Day-2 / Day-5 follow-ups, all via the app-only Microsoft Graph credentials
 (same Azure app as graph_outlook). Drafts only — never sends.
 
 Called by the scheduler/cron. Uses the existing Lead status machine:
-  APPROVED / DRAFTED  --(sent detected)-->  DRAFTED (initial_sent_at set)
-  DRAFTED             --(Day-2 working)-->  FOLLOWED_UP_D2
-  FOLLOWED_UP_D2      --(Day-5 working)-->  FOLLOWED_UP_D5
-  any                 --(reply)-->          RESPONDED  (stops follow-ups)
+APPROVED / DRAFTED --(sent detected)--> DRAFTED (initial_sent_at set)
+DRAFTED --(Day-2 working)--> FOLLOWED_UP_D2
+FOLLOWED_UP_D2 --(Day-5 working)--> FOLLOWED_UP_D5
+any --(reply)--> RESPONDED (stops follow-ups)
 """
 from __future__ import annotations
 
@@ -51,16 +51,23 @@ def _list_folder(mailbox: str, folder: str, date_field: str, since_iso: str) -> 
         f"?$select=subject,toRecipients,from,{date_field},conversationId"
         f"&$top=200&$filter={date_field} ge {since_iso}"
     )
+    items: list = []
     try:
-        return _get(url).get("value", [])
+        # Follow @odata.nextLink so a wide look-back window is not truncated at 200.
+        while url and len(items) < 2000:
+            data = _get(url)
+            items.extend(data.get("value", []))
+            url = data.get("@odata.nextLink")
+        return items
     except Exception as e:
         print(f"[MOD-11] list {folder} failed for {mailbox}: {e}")
-        return []
+        return items
 
 
 def run_outlook_tracking() -> dict:
     now = datetime.now(timezone.utc)
-    since = (now - timedelta(days=21)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # 90-day look-back so past leads (not just the last 3 weeks) get backfilled.
+    since = (now - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%SZ")
     stats = {"sent": 0, "replies": 0, "d2": 0, "d5": 0, "errors": 0}
 
     sent_cache: dict = {}
@@ -76,7 +83,7 @@ def run_outlook_tracking() -> dict:
             inbox_cache[mb] = _list_folder(mb, "Inbox", "receivedDateTime", since)
         return inbox_cache[mb]
 
-    # 1) SENT DETECTION — match the initial draft's subject in the rep's Sent folder
+    # 1) SENT DETECTION — match the initial draft's subject OR recipient in the rep's Sent folder
     with get_db() as db:
         cands = (
             db.query(Lead)
@@ -91,12 +98,22 @@ def run_outlook_tracking() -> dict:
             d = (db.query(EmailDraft)
                  .filter_by(lead_id=lead.id, draft_type="INITIAL", language="EN", provider="outlook")
                  .first())
+            to_addr = (lead.contact.email or "").strip().lower() if (lead.contact and lead.contact.email) else ""
             if mb and d and d.subject_line:
-                rows.append((lead.id, mb, d.subject_line.strip().lower()))
-    for lead_id, mb, subj in rows:
+                rows.append((lead.id, mb, d.subject_line.strip().lower(), to_addr))
+    for lead_id, mb, subj, to_addr in rows:
         try:
-            match = next((m for m in sent_for(mb)
-                          if (m.get("subject") or "").strip().lower() == subj), None)
+            def _matches(m, subj=subj, to_addr=to_addr):
+                # Primary: exact subject match. Fallback: same recipient (covers edited subjects).
+                if (m.get("subject") or "").strip().lower() == subj:
+                    return True
+                if to_addr:
+                    for rcp in (m.get("toRecipients") or []):
+                        addr = ((rcp.get("emailAddress") or {}).get("address") or "").lower()
+                        if addr == to_addr:
+                            return True
+                return False
+            match = next((m for m in sent_for(mb) if _matches(m)), None)
             if not match:
                 continue
             to = ((match.get("toRecipients") or [{}])[0].get("emailAddress") or {})
@@ -202,6 +219,6 @@ def _create_followup_outlook(lead_id: int, mailbox: str, draft_type: str) -> Non
         lead = db.query(Lead).filter_by(id=lead_id).first()
         ctx = _build_context(lead, lead.company, lead.contact)
         to_email = lead.sent_to_email or (lead.contact.email if lead.contact else "")
-    subject, body = _generate_email(ctx, draft_type, "EN")
-    res = create_outlook_draft(mailbox=mailbox, to_email=to_email, subject=subject, body=body)
-    _save_draft(lead_id, draft_type, "EN", subject, body, res.get("id", ""), "outlook")
+        subject, body = _generate_email(ctx, draft_type, "EN")
+        res = create_outlook_draft(mailbox=mailbox, to_email=to_email, subject=subject, body=body)
+        _save_draft(lead_id, draft_type, "EN", subject, body, res.get("id", ""), "outlook")
