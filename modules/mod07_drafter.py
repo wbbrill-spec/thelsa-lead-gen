@@ -11,6 +11,7 @@ Spanish version is culturally adapted for Mexican business context.
 from __future__ import annotations
 import base64
 import json
+import re
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
 
@@ -18,7 +19,6 @@ import anthropic
 import config
 from db import get_db
 from models import Lead, Company, Contact, User, EmailDraft
-
 
 # ── Thelsa service description (sourced from thelsa.com) ──────────────────────
 
@@ -38,7 +38,6 @@ _THELSA_SERVICES_ES = """Thelsa es la empresa de mudanzas y reubicación más gr
 - Servicios de apoyo en inmigración
 Somos especialistas en mudanzas transfronterizas entre México y los Estados Unidos."""
 
-
 # ── Prompt templates ───────────────────────────────────────────────────────────
 
 _INITIAL_SMB_EN = """Write a professional outreach email in English from Thelsa to {contact_name} at {company_name}.
@@ -53,6 +52,7 @@ Requirements:
 - Reference their specific expansion
 - Introduce Thelsa and its services briefly
 - CTA: request a 15-minute call
+- Greet the recipient by name using the provided contact name; never use a placeholder like "[Name]"
 - Do NOT use subject line in body
 
 Return ONLY a JSON object:
@@ -69,6 +69,7 @@ Requirements:
 - B2B partner-to-partner tone
 - Introduce Thelsa as a potential partner to support their clients moving in/out of Mexico
 - CTA: request a 20-minute call to explore how we can work together to benefit their clients
+- Greet the recipient by name using the provided contact name; never use a placeholder like "[Name]"
 - Do NOT use subject line in body
 
 Return ONLY a JSON object:
@@ -88,6 +89,7 @@ Requisitos:
 - Presenta brevemente a Thelsa y sus servicios
 - CTA: solicitar una llamada de 15 minutos
 - Cierre formal apropiado para el contexto empresarial mexicano
+- Nunca uses un marcador como "[Name]" ni "[Nombre]"; usa el nombre proporcionado
 - NO incluyas el asunto en el cuerpo del correo
 
 Responde ÚNICAMENTE con un objeto JSON:
@@ -106,6 +108,7 @@ Requisitos:
 - Presenta a Thelsa como socio potencial para apoyar a sus clientes con mudanzas en/desde México
 - CTA: solicitar una llamada de 20 minutos para explorar cómo trabajar juntos en beneficio de sus clientes
 - Cierre formal apropiado para el contexto empresarial mexicano
+- Nunca uses un marcador como "[Name]" ni "[Nombre]"; usa el nombre proporcionado
 - NO incluyas el asunto en el cuerpo del correo
 
 Responde ÚNICAMENTE con un objeto JSON:
@@ -118,6 +121,7 @@ Requirements:
 - Gentle bump — assume the email got buried
 - Reference the original email briefly
 - Same CTA: {cta}
+- Greet the recipient by name using the provided contact name; never use a placeholder like "[Name]"
 - Do NOT use subject line in body
 
 Return ONLY a JSON object:
@@ -132,6 +136,7 @@ Requisitos:
 - Referencia brevemente el correo anterior
 - Mismo CTA: {cta}
 - Cierre breve pero formal
+- Nunca uses un marcador como "[Name]" ni "[Nombre]"; usa el nombre proporcionado
 - NO incluyas el asunto en el cuerpo del correo
 
 Responde ÚNICAMENTE con un objeto JSON:
@@ -151,6 +156,7 @@ Requirements:
 - Professional but urgent tone
 - Confident, not desperate
 - Clear final CTA: 15-minute call
+- Greet the recipient by name using the provided contact name; never use a placeholder like "[Name]"
 - Do NOT use subject line in body
 
 Return ONLY a JSON object:
@@ -171,6 +177,7 @@ Requirements:
 - B2B partner framing
 - Confident, not desperate
 - Clear final CTA: 20-minute call
+- Greet the recipient by name using the provided contact name; never use a placeholder like "[Name]"
 - Do NOT use subject line in body
 
 Return ONLY a JSON object:
@@ -191,6 +198,7 @@ Requisitos:
 - Saludo formal mexicano
 - CTA claro: llamada de 15 minutos
 - Cierre formal apropiado
+- Nunca uses un marcador como "[Name]" ni "[Nombre]"; usa el nombre proporcionado
 - NO incluyas el asunto en el cuerpo del correo
 
 Responde ÚNICAMENTE con un objeto JSON:
@@ -211,11 +219,11 @@ Requisitos:
 - Saludo formal mexicano
 - CTA claro: llamada de 20 minutos
 - Cierre formal apropiado
+- Nunca uses un marcador como "[Name]" ni "[Nombre]"; usa el nombre proporcionado
 - NO incluyas el asunto en el cuerpo del correo
 
 Responde ÚNICAMENTE con un objeto JSON:
 {{"subject": "...", "body": "..."}}"""
-
 
 # ── Main functions ─────────────────────────────────────────────────────────────
 
@@ -278,9 +286,9 @@ def create_followup_drafts(lead_id: int, draft_type: str) -> list[int]:
         if not token_json:
             raise ValueError(f"No OAuth token for user {assigned_user.full_name}")
 
-    from web_auth import WebAuthFlow
-    credentials = WebAuthFlow.credentials_from_token(token_json)
-    user_email = assigned_user.active_email
+        from web_auth import WebAuthFlow
+        credentials = WebAuthFlow.credentials_from_token(token_json)
+        user_email = assigned_user.active_email
 
     draft_ids = []
     for lang in ["EN", "ES"]:
@@ -318,9 +326,9 @@ def send_call_required_notification(lead_id: int) -> bool:
         contact_email = contact.email if contact else ""
         company_name = company.name if company else "the company"
 
-    from web_auth import WebAuthFlow
-    credentials = WebAuthFlow.credentials_from_token(token_json)
-    user_email = assigned_user.active_email
+        from web_auth import WebAuthFlow
+        credentials = WebAuthFlow.credentials_from_token(token_json)
+        user_email = assigned_user.active_email
 
     subject = f"📞 Time to call: {contact_name} at {company_name}"
     body = f"""Hi {assigned_user.full_name.split()[0]},
@@ -330,10 +338,10 @@ The automated outreach sequence for {contact_name} at {company_name} is complete
 It's time to make a phone call.
 
 Contact details:
-  Name: {contact_name}
-  Phone: {contact_phone}
-  Email: {contact_email}
-  Company: {company_name}
+Name: {contact_name}
+Phone: {contact_phone}
+Email: {contact_email}
+Company: {company_name}
 
 Good luck!
 
@@ -352,13 +360,39 @@ Good luck!
         print(f"[MOD-07] Call required notification error: {e}")
         return False
 
-
 # ── Internal helpers ───────────────────────────────────────────────────────────
+
+_GENERIC_LOCALPARTS = {
+    "info", "sales", "contact", "hello", "admin", "marketing", "hr",
+    "careers", "jobs", "support", "team", "office", "help", "mail",
+    "no-reply", "noreply", "newsletter", "press", "media", "billing",
+}
+
+
+def _name_from_email(email: str) -> str:
+    """Derive a human display name from an email address local-part.
+
+    'michel.colon@bimbobakeriesusa.com' -> 'Michel Colon'. Returns '' for
+    generic mailboxes (info@, sales@, ...) or when nothing usable is found.
+    """
+    local = (email or "").split("@")[0].strip().lower()
+    if not local or local in _GENERIC_LOCALPARTS:
+        return ""
+    local = re.sub(r"\d+", "", local)  # drop digits like john.doe2
+    parts = [p for p in re.split(r"[._\-]+", local) if p and p not in _GENERIC_LOCALPARTS]
+    if not parts:
+        return ""
+    return " ".join(p.capitalize() for p in parts)
+
 
 def _build_context(lead, company, contact) -> dict:
     """Build template context dict from DB objects."""
-    contact_name = contact.full_name if contact else "there"
-    contact_first_name = contact_name.split()[0] if contact_name != "there" else "there"
+    contact_name = (contact.full_name or "").strip() if contact else ""
+    if not contact_name:
+        # No stored name — derive one from the recipient email address.
+        source_email = (contact.email if (contact and contact.email) else "") or (lead.sent_to_email or "")
+        contact_name = _name_from_email(source_email) or "there"
+    contact_first_name = contact_name.split()[0] if contact_name and contact_name != "there" else "there"
     contact_title = contact.title if contact else ""
     contact_type = contact.contact_type if contact else "DIRECT"
 
