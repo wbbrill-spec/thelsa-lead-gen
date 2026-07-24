@@ -456,6 +456,46 @@ def cron_run():
     return jsonify({"ok": True, "started": True})
 
 
+@app.route("/admin/zoominfo-test", methods=["GET"])
+def zoominfo_test():
+    """Token-guarded one-shot ZoomInfo enrich test — returns the raw API response
+    so we can confirm the new GTM enrich call works (or see the exact error)."""
+    import os
+    import requests as _rq
+    import config
+    from modules.mod05_enricher import _get_zoominfo_token, _ZI_OUTPUT_FIELDS
+    token = os.environ.get("CRON_TOKEN", "")
+    if not token or request.args.get("token") != token:
+        return ("forbidden", 403)
+    out = {
+        "base_url": config.ZOOMINFO_BASE_URL,
+        "token_url": config.ZOOMINFO_TOKEN_URL,
+        "has_client_id": bool(config.ZOOMINFO_CLIENT_ID),
+        "has_client_secret": bool(config.ZOOMINFO_CLIENT_SECRET),
+    }
+    tok = _get_zoominfo_token()
+    out["token_ok"] = bool(tok)
+    if not tok:
+        return jsonify(out)
+    company = request.args.get("company", "Bimbo Bakeries USA")
+    title = request.args.get("title", "Logistics Manager")
+    url = f"{config.ZOOMINFO_BASE_URL}/data/v1/contacts/enrich"
+    payload = {"data": {"matchPersonInput": [{"companyName": company, "jobTitle": title}],
+                        "outputFields": _ZI_OUTPUT_FIELDS}}
+    try:
+        r = _rq.post(url, headers={"Authorization": f"Bearer {tok}",
+                                   "Content-Type": "application/json",
+                                   "Accept": "application/json",
+                                   "User-Agent": "TMS-LeadGen/1.0"},
+                     json=payload, timeout=15)
+        out["enrich_url"] = url
+        out["status_code"] = r.status_code
+        out["response"] = r.text[:3000]
+    except Exception as exc:
+        out["error"] = str(exc)
+    return jsonify(out)
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "service": "tms-leadgen"})
