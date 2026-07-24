@@ -1,6 +1,6 @@
 """MOD-05: Contact Enricher
 
-Finds the correct contact for outreach using ZoomInfo API.
+Finds the correct contact for outreach using the ZoomInfo GTM API.
 Falls back to web search + AI extraction if ZoomInfo returns nothing.
 Writes Company, Contact, and Lead records to DB.
 """
@@ -13,8 +13,13 @@ import requests
 from dataclasses import dataclass
 from modules.mod04_segmentation import SegmentedCandidate
 
-
 _ZOOMINFO_TOKEN_CACHE = {"token": None, "expires_at": 0}
+
+# Fields we ask ZoomInfo to return for an enriched contact.
+_ZI_OUTPUT_FIELDS = [
+    "firstName", "lastName", "jobTitle", "email", "phone",
+    "mobilePhone", "companyName", "contactAccuracyScore",
+]
 
 
 def enrich_contacts(
@@ -59,7 +64,7 @@ def _process_one(candidate: SegmentedCandidate, generated_by_user_id: int) -> in
 def _find_direct_contact(company_name: str, domain: str, industry: str) -> dict:
     """Find a direct contact at the company via ZoomInfo, fallback to web search."""
     # Try ZoomInfo first
-    zoominfo_result = _zoominfo_search(
+    zoominfo_result = _zoominfo_enrich(
         company_name=company_name,
         domain=domain,
         titles=["Logistics Manager", "Operations Manager", "Supply Chain Manager",
@@ -74,7 +79,7 @@ def _find_direct_contact(company_name: str, domain: str, industry: str) -> dict:
 
 def _find_rmc_contact(rmc_name: str) -> dict:
     """Find supply chain / network manager at the RMC via ZoomInfo, fallback to web search."""
-    zoominfo_result = _zoominfo_search(
+    zoominfo_result = _zoominfo_enrich(
         company_name=rmc_name,
         domain="",
         titles=["Supply Chain Manager", "Network Manager", "Account Manager",
@@ -86,8 +91,13 @@ def _find_rmc_contact(rmc_name: str) -> dict:
     return _web_search_contact(rmc_name, "", "relocation", contact_type="rmc")
 
 
-def _zoominfo_search(company_name: str, domain: str, titles: list[str]) -> dict | None:
-    """Search ZoomInfo API for a contact. Returns dict or None."""
+def _zoominfo_enrich(company_name: str, domain: str, titles: list[str]) -> dict | None:
+    """Enrich a best-match contact via the ZoomInfo GTM Contact Enrich API.
+
+    Endpoint: POST {BASE}/data/v1/contacts/enrich
+    Uses best-match input (company + target title [+ website]) so we do not
+    need the two-stage search->enrich flow. Returns a contact dict or None.
+    """
     import config
 
     if not config.ZOOMINFO_CLIENT_ID or not config.ZOOMINFO_CLIENT_SECRET:
@@ -101,38 +111,39 @@ def _zoominfo_search(company_name: str, domain: str, titles: list[str]) -> dict 
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
             "User-Agent": "TMS-LeadGen/1.0",
         }
 
-        # Search for person by company
+        match: dict = {"companyName": company_name}
+        if titles:
+            # jobTitle is a single free-text hint for best-match; use the top target title.
+            match["jobTitle"] = titles[0]
+        if domain:
+            match["companyWebsite"] = domain if domain.startswith("http") else f"https://{domain}"
+
+        # New GTM API wraps the request in a JSON:API "data" object.
         payload = {
-            "outputFields": ["firstName", "lastName", "jobTitle", "email", "phone", "companyName"],
-            "searchValues": {
-                "companyName": [company_name],
-                "jobTitle": titles[:5],
-            },
-            "sortBy": "relevance",
-            "rpp": 1,
-            "page": 1,
+            "data": {
+                "matchPersonInput": [match],
+                "outputFields": _ZI_OUTPUT_FIELDS,
+            }
         }
 
-        if domain:
-            payload["searchValues"]["companyWebsite"] = [domain]
+        url = f"{config.ZOOMINFO_BASE_URL}/data/v1/contacts/enrich"
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
 
-        resp = requests.post(
-            f"{config.ZOOMINFO_BASE_URL}/search/contact",
-            headers=headers,
-            json=payload,
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        results = data.get("data", {}).get("outputFields", [])
-        if not results:
+        if resp.status_code >= 400:
+            # Log the exact error body so a live discovery run reveals any schema mismatch.
+            print(f"[MOD-05] ZoomInfo enrich HTTP {resp.status_code}: {resp.text[:600]}")
             return None
 
-        person = results[0]
+        data = resp.json()
+        person = _extract_person(data)
+        if not person:
+            print("[MOD-05] ZoomInfo enrich: no match in response")
+            return None
+
         full_name = f"{person.get('firstName', '')} {person.get('lastName', '')}".strip()
         if not full_name:
             return None
@@ -140,8 +151,8 @@ def _zoominfo_search(company_name: str, domain: str, titles: list[str]) -> dict 
         return {
             "full_name": full_name,
             "title": person.get("jobTitle", ""),
-            "email": person.get("email", ""),
-            "phone": person.get("phone", ""),
+            "email": person.get("email", "") or "",
+            "phone": person.get("phone", "") or person.get("mobilePhone", "") or "",
             "enrichment_source": "zoominfo",
             "enrichment_raw": person,
         }
@@ -154,8 +165,38 @@ def _zoominfo_search(company_name: str, domain: str, titles: list[str]) -> dict 
         return None
 
 
+def _extract_person(obj) -> dict | None:
+    """Defensively pull the first contact-like record out of a ZoomInfo response.
+
+    The GTM API response nests results under a JSON:API envelope; rather than
+    hard-code one shape, walk the structure and return the first dict that
+    carries name/email fields, normalizing key casing.
+    """
+    if isinstance(obj, dict):
+        lower = {k.lower(): v for k, v in obj.items()}
+        if "firstname" in lower or "lastname" in lower or "email" in lower:
+            return {
+                "firstName": lower.get("firstname") or "",
+                "lastName": lower.get("lastname") or "",
+                "jobTitle": lower.get("jobtitle") or lower.get("title") or "",
+                "email": lower.get("email") or "",
+                "phone": lower.get("phone") or "",
+                "mobilePhone": lower.get("mobilephone") or "",
+            }
+        for v in obj.values():
+            found = _extract_person(v)
+            if found:
+                return found
+    elif isinstance(obj, list):
+        for v in obj:
+            found = _extract_person(v)
+            if found:
+                return found
+    return None
+
+
 def _get_zoominfo_token() -> str | None:
-    """Get a valid ZoomInfo OAuth token, refreshing if expired."""
+    """Get a valid ZoomInfo OAuth token (client-credentials), refreshing if expired."""
     import config
 
     now = time.time()
@@ -165,7 +206,8 @@ def _get_zoominfo_token() -> str | None:
     try:
         resp = requests.post(
             config.ZOOMINFO_TOKEN_URL,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Accept": "application/json"},
             data={
                 "grant_type": "client_credentials",
                 "client_id": config.ZOOMINFO_CLIENT_ID,
@@ -173,7 +215,9 @@ def _get_zoominfo_token() -> str | None:
             },
             timeout=10,
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            print(f"[MOD-05] ZoomInfo token HTTP {resp.status_code}: {resp.text[:400]}")
+            return None
         data = resp.json()
         token = data.get("access_token", "")
         expires_in = data.get("expires_in", 3600)
