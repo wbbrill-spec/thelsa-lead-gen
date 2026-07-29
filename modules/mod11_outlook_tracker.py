@@ -17,6 +17,10 @@ Two sent-detection paths:
   outreach is found, the lead is flagged NO_OUTREACH so it can be chased.
 - Leads assigned directly to a rep (the current flow) are matched by the initial
   draft's subject OR recipient in that rep's Sent folder.
+
+Follow-up drafting is idempotent: a Day-2 or Day-5 draft is only created if one
+of that type does not already exist for the lead, so overlapping runs (manual
+triggers + the daily cron) can never produce duplicate follow-up drafts.
 """
 from __future__ import annotations
 
@@ -288,26 +292,42 @@ def _run_followups(now: datetime, draft_type: str) -> int:
         if not mb:
             continue
         try:
-            _create_followup_outlook(lead_id, mb, draft_type)
+            created = _create_followup_outlook(lead_id, mb, draft_type)
+            # Advance the state machine whether or not a new draft was created, so
+            # the lead is never re-picked (this is what stops duplicate follow-ups).
             with get_db() as db:
                 lead = db.query(Lead).filter_by(id=lead_id).first()
                 setattr(lead, "followup_d2_sent_at" if draft_type == "FOLLOWUP_D2" else "followup_d5_sent_at", now)
-                transition_status(db, lead, to_status, "system",
-                                  f"{draft_type} draft created in Outlook")
-            count += 1
+                reason = (f"{draft_type} draft created in Outlook" if created
+                          else f"{draft_type} already drafted — skipped duplicate")
+                transition_status(db, lead, to_status, "system", reason)
+            if created:
+                count += 1
         except Exception as e:
             print(f"[MOD-11] {draft_type} error lead {lead_id}: {e}")
     return count
 
 
-def _create_followup_outlook(lead_id: int, mailbox: str, draft_type: str) -> None:
+def _create_followup_outlook(lead_id: int, mailbox: str, draft_type: str) -> bool:
+    """Create a follow-up draft in Outlook — but only if one of this type does not
+    already exist for the lead. Idempotent: prevents duplicate follow-up drafts
+    even across overlapping runs. Returns True if a new draft was created, False
+    if an existing draft made it a no-op.
+    """
     from modules.mod07_drafter import _build_context, _generate_email, _save_draft
     from modules.graph_outlook import create_outlook_draft
 
     with get_db() as db:
+        existing = (db.query(EmailDraft)
+                    .filter_by(lead_id=lead_id, draft_type=draft_type, provider="outlook")
+                    .first())
+        if existing:
+            print(f"[MOD-11] {draft_type} already drafted for lead {lead_id}; skipping duplicate.")
+            return False
         lead = db.query(Lead).filter_by(id=lead_id).first()
         ctx = _build_context(lead, lead.company, lead.contact)
         to_email = lead.sent_to_email or (lead.contact.email if lead.contact else "")
         subject, body = _generate_email(ctx, draft_type, "EN")
         res = create_outlook_draft(mailbox=mailbox, to_email=to_email, subject=subject, body=body)
         _save_draft(lead_id, draft_type, "EN", subject, body, res.get("id", ""), "outlook")
+    return True
