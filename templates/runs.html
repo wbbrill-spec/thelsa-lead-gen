@@ -37,6 +37,17 @@
   </div>
 </div>
 
+{% if serp %}
+  {% set left = serp.get('total_searches_left', serp.get('plan_searches_left')) %}
+  {% if serp.get('error') %}
+  <div class="warn-box">SerpAPI account check failed: {{ serp.error }}</div>
+  {% elif left is not none and left < 50 %}
+  <div class="warn-box"><strong>SerpAPI quota nearly gone:</strong> {{ left }} searches left this month ({{ serp.get('this_month_usage') }}/{{ serp.get('searches_per_month') }} used). Runs need ~15–30 each. Upgrade at serpapi.com or wait for the monthly reset.</div>
+  {% else %}
+  <div class="text-muted text-small" style="margin-bottom: 12px;">SerpAPI: {{ left }} searches left this month ({{ serp.get('this_month_usage') }}/{{ serp.get('searches_per_month') }} used{% if serp.get('plan_name') %}, {{ serp.plan_name }}{% endif %}).</div>
+  {% endif %}
+{% endif %}
+
 {% if config_warnings %}
 <div class="warn-box">
   <strong>Configuration warnings</strong> — these will make runs fail or behave unexpectedly:
