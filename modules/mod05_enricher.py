@@ -1,6 +1,7 @@
 """MOD-05: Contact Enricher
 
-Finds the correct contact for outreach using the ZoomInfo GTM API.
+Finds the correct contact for outreach using the ZoomInfo GTM API
+(modules/zoominfo.py: contact search → enrich by personId).
 Falls back to web search + AI extraction if ZoomInfo returns nothing.
 Writes Company, Contact, and Lead records to DB.
 """
@@ -16,14 +17,6 @@ from modules.llm import ask_json, LLMError
 
 # Per-run enrichment stats, reset by the pipeline runner.
 STATS = {"zoominfo_hits": 0, "web_hits": 0, "empty": 0, "zoominfo_http_errors": 0}
-
-_ZOOMINFO_TOKEN_CACHE = {"token": None, "expires_at": 0}
-
-# Fields we ask ZoomInfo to return for an enriched contact.
-_ZI_OUTPUT_FIELDS = [
-    "firstName", "lastName", "jobTitle", "email", "phone",
-    "mobilePhone", "companyName", "contactAccuracyScore",
-]
 
 
 def enrich_contacts(
@@ -108,142 +101,15 @@ def _count(contact: dict) -> dict:
 
 
 def _zoominfo_enrich(company_name: str, domain: str, titles: list[str]) -> dict | None:
-    """Enrich a best-match contact via the ZoomInfo GTM Contact Enrich API.
-
-    Endpoint: POST {BASE}/data/v1/contacts/enrich
-    Uses best-match input (company + target title [+ website]) so we do not
-    need the two-stage search->enrich flow. Returns a contact dict or None.
-    """
-    import config
-
-    if not config.ZOOMINFO_CLIENT_ID or not config.ZOOMINFO_CLIENT_SECRET:
-        return None  # Credentials not configured — use fallback
-
-    try:
-        token = _get_zoominfo_token()
-        if not token:
-            return None
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "TMS-LeadGen/1.0",
-        }
-
-        match: dict = {"companyName": company_name}
-        if titles:
-            # jobTitle is a single free-text hint for best-match; use the top target title.
-            match["jobTitle"] = titles[0]
-        if domain:
-            match["companyWebsite"] = domain if domain.startswith("http") else f"https://{domain}"
-
-        # New GTM API wraps the request in a JSON:API "data" object.
-        payload = {
-            "data": {
-                "matchPersonInput": [match],
-                "outputFields": _ZI_OUTPUT_FIELDS,
-            }
-        }
-
-        url = f"{config.ZOOMINFO_BASE_URL}/data/v1/contacts/enrich"
-        resp = requests.post(url, headers=headers, json=payload, timeout=15)
-
-        if resp.status_code >= 400:
-            # Log the exact error body so a live discovery run reveals any schema mismatch.
-            STATS["zoominfo_http_errors"] += 1
-            print(f"[MOD-05] ZoomInfo enrich HTTP {resp.status_code}: {resp.text[:600]}")
-            return None
-
-        data = resp.json()
-        person = _extract_person(data)
-        if not person:
-            print("[MOD-05] ZoomInfo enrich: no match in response")
-            return None
-
-        full_name = f"{person.get('firstName', '')} {person.get('lastName', '')}".strip()
-        if not full_name:
-            return None
-
-        return {
-            "full_name": full_name,
-            "title": person.get("jobTitle", ""),
-            "email": person.get("email", "") or "",
-            "phone": person.get("phone", "") or person.get("mobilePhone", "") or "",
-            "enrichment_source": "zoominfo",
-            "enrichment_raw": person,
-        }
-
-    except requests.exceptions.HTTPError as e:
-        print(f"[MOD-05] ZoomInfo HTTP error: {e}")
+    """Search ZoomInfo for the best contact at the company and enrich it.
+    See modules/zoominfo.py for the two-step search→enrich flow."""
+    from modules import zoominfo
+    if not zoominfo.configured():
         return None
-    except Exception as e:
-        print(f"[MOD-05] ZoomInfo error: {e}")
-        return None
-
-
-def _extract_person(obj) -> dict | None:
-    """Defensively pull the first contact-like record out of a ZoomInfo response.
-
-    The GTM API response nests results under a JSON:API envelope; rather than
-    hard-code one shape, walk the structure and return the first dict that
-    carries name/email fields, normalizing key casing.
-    """
-    if isinstance(obj, dict):
-        lower = {k.lower(): v for k, v in obj.items()}
-        if "firstname" in lower or "lastname" in lower or "email" in lower:
-            return {
-                "firstName": lower.get("firstname") or "",
-                "lastName": lower.get("lastname") or "",
-                "jobTitle": lower.get("jobtitle") or lower.get("title") or "",
-                "email": lower.get("email") or "",
-                "phone": lower.get("phone") or "",
-                "mobilePhone": lower.get("mobilephone") or "",
-            }
-        for v in obj.values():
-            found = _extract_person(v)
-            if found:
-                return found
-    elif isinstance(obj, list):
-        for v in obj:
-            found = _extract_person(v)
-            if found:
-                return found
-    return None
-
-
-def _get_zoominfo_token() -> str | None:
-    """Get a valid ZoomInfo OAuth token (client-credentials), refreshing if expired."""
-    import config
-
-    now = time.time()
-    if _ZOOMINFO_TOKEN_CACHE["token"] and _ZOOMINFO_TOKEN_CACHE["expires_at"] > now + 60:
-        return _ZOOMINFO_TOKEN_CACHE["token"]
-
-    try:
-        resp = requests.post(
-            config.ZOOMINFO_TOKEN_URL,
-            headers={"Content-Type": "application/x-www-form-urlencoded",
-                     "Accept": "application/json"},
-            data={
-                "grant_type": "client_credentials",
-                "client_id": config.ZOOMINFO_CLIENT_ID,
-                "client_secret": config.ZOOMINFO_CLIENT_SECRET,
-            },
-            timeout=10,
-        )
-        if resp.status_code >= 400:
-            print(f"[MOD-05] ZoomInfo token HTTP {resp.status_code}: {resp.text[:400]}")
-            return None
-        data = resp.json()
-        token = data.get("access_token", "")
-        expires_in = data.get("expires_in", 3600)
-        _ZOOMINFO_TOKEN_CACHE["token"] = token
-        _ZOOMINFO_TOKEN_CACHE["expires_at"] = now + expires_in
-        return token
-    except Exception as e:
-        print(f"[MOD-05] ZoomInfo token error: {e}")
-        return None
+    errors_before = zoominfo.STATS["http_errors"]
+    result = zoominfo.find_contact(company_name, domain, titles)
+    STATS["zoominfo_http_errors"] += zoominfo.STATS["http_errors"] - errors_before
+    return result
 
 
 def _web_search_contact(

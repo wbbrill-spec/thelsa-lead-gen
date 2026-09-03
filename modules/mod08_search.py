@@ -33,6 +33,22 @@ class SearchResult:
         return f"<SearchResult {self.title[:50]}>"
 
 
+def account_status() -> dict:
+    """SerpAPI account info: {'plan_searches_left', 'searches_per_month', 'this_month_usage', 'plan_name'}.
+    Returns {} if not SerpAPI / not configured / request failed."""
+    if config.SEARCH_PROVIDER.lower() != "serpapi" or not config.SEARCH_API_KEY:
+        return {}
+    try:
+        resp = requests.get("https://serpapi.com/account", params={"api_key": config.SEARCH_API_KEY}, timeout=10)
+        if resp.status_code != 200:
+            return {"error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+        d = resp.json()
+        return {k: d.get(k) for k in ("plan_searches_left", "searches_per_month", "this_month_usage",
+                                       "plan_name", "extra_credits", "total_searches_left") if k in d}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def search(query: str, num_results: int = 10, recency_days: int = 30) -> list[SearchResult]:
     """Execute a web search and return results.
 
