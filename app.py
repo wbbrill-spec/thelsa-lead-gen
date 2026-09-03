@@ -510,10 +510,12 @@ def zoominfo_test():
     """Token-guarded ZoomInfo diagnostic: runs contact search → enrich for one
     company and returns every raw request/response, so the integration can be
     verified (or debugged) without a full discovery run.
-    Usage: /admin/zoominfo-test?token=CRON_TOKEN&company=Bimbo%20Bakeries%20USA&domain=bimbobakeriesusa.com
+    Usage (signed-in user, or ?token=CRON_TOKEN):
+      /admin/zoominfo-test?company=Bimbo%20Bakeries%20USA&domain=bimbobakeriesusa.com
     """
     token = os.environ.get("CRON_TOKEN", "")
-    if not token or request.args.get("token") != token:
+    token_ok = bool(token) and request.args.get("token") == token
+    if not token_ok and "user_id" not in session:
         return ("forbidden", 403)
     from modules import zoominfo
     company = request.args.get("company", "Bimbo Bakeries USA")
