@@ -43,8 +43,10 @@ _TOKEN = {"token": None, "expires_at": 0.0}
 _TOKEN_LOCK = threading.Lock()
 _WORKING_ENRICH_ENVELOPE = {"idx": None}   # remembered across calls in this process
 
-_HEADERS_BASE = {"Content-Type": "application/json", "Accept": "application/json",
-                 "User-Agent": "TMS-LeadGen/2.0"}
+# The GTM API is JSON:API; it answers 406 "Not Acceptable" to Accept: application/json.
+_MEDIA_TYPES = ["application/vnd.api+json", "application/json"]
+_WORKING_MEDIA = {"idx": 0}
+_USER_AGENT = "TMS-LeadGen/2.0"
 
 
 class ZoomInfoError(RuntimeError):
@@ -81,16 +83,25 @@ def get_token() -> str:
 
 def _post(path: str, payload: dict, params: dict | None = None, timeout: int = 20) -> requests.Response:
     url = f"{config.ZOOMINFO_BASE_URL}{path}"
-    for attempt in range(3):
-        headers = dict(_HEADERS_BASE)
-        headers["Authorization"] = f"Bearer {get_token()}"
-        r = requests.post(url, headers=headers, json=payload, params=params, timeout=timeout)
-        if r.status_code == 401 and attempt == 0:
-            _TOKEN["token"] = None
+    media_order = [_WORKING_MEDIA["idx"]] + [i for i in range(len(_MEDIA_TYPES)) if i != _WORKING_MEDIA["idx"]]
+    r = None
+    for midx in media_order:
+        media = _MEDIA_TYPES[midx]
+        for attempt in range(3):
+            headers = {"Content-Type": media, "Accept": media, "User-Agent": _USER_AGENT,
+                       "Authorization": f"Bearer {get_token()}"}
+            r = requests.post(url, headers=headers, json=payload, params=params, timeout=timeout)
+            if r.status_code == 401 and attempt == 0:
+                _TOKEN["token"] = None
+                continue
+            if r.status_code in (429, 500, 502, 503, 504) and attempt < 2:
+                time.sleep(min(float(r.headers.get("Retry-After", 2 ** attempt)), 20))
+                continue
+            break
+        if r.status_code in (406, 415):
+            print(f"[ZI] {path}: HTTP {r.status_code} with media type {media}; trying next")
             continue
-        if r.status_code in (429, 500, 502, 503, 504) and attempt < 2:
-            time.sleep(min(float(r.headers.get("Retry-After", 2 ** attempt)), 20))
-            continue
+        _WORKING_MEDIA["idx"] = midx
         return r
     return r
 
