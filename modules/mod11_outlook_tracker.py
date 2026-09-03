@@ -30,14 +30,14 @@ import requests
 
 from db import get_db
 from models import Lead, EmailDraft, User, transition_status
-from modules.graph_outlook import GRAPH, _token
+from modules.graph_outlook import GRAPH, graph_request
 
 NO_OUTREACH = "NO_OUTREACH"
 LEGACY_ASSIGNEE = "Bill Brill"
 
 
 def _get(url: str) -> dict:
-    r = requests.get(url, headers={"Authorization": f"Bearer {_token()}"}, timeout=30)
+    r = graph_request("GET", url, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -81,16 +81,14 @@ def _list_folder(mailbox: str, folder: str, date_field: str, since_iso: str) -> 
         f"&$top=200&$filter={date_field} ge {since_iso}"
     )
     items: list = []
-    try:
-        # Follow @odata.nextLink so a wide look-back window is not truncated at 200.
-        while url and len(items) < 2000:
-            data = _get(url)
-            items.extend(data.get("value", []))
-            url = data.get("@odata.nextLink")
-        return items
-    except Exception as e:
-        print(f"[MOD-11] list {folder} failed for {mailbox}: {e}")
-        return items
+    # Follow @odata.nextLink so a wide look-back window is not truncated at 200.
+    # Any failure RAISES: a partial Sent list must never be treated as "no
+    # outreach found" (which used to flag real leads NO_OUTREACH).
+    while url and len(items) < 2000:
+        data = _get(url)
+        items.extend(data.get("value", []))
+        url = data.get("@odata.nextLink")
+    return items
 
 
 def _recip_matching_domain(msg: dict, company_domain: str) -> dict:
@@ -191,8 +189,15 @@ def run_outlook_tracking() -> dict:
     for lead_id, cdom in legacy_rows:
         try:
             best = None  # (sent_dt, msg, mailbox, user_id, recipient)
+            listing_ok = True
             for uid, mb in reps:
-                for m in sent_for(mb):
+                try:
+                    msgs = sent_for(mb)
+                except Exception as e:
+                    listing_ok = False
+                    print(f"[MOD-11] Sent listing failed for {mb}: {e}")
+                    continue
+                for m in msgs:
                     sdt = _parse(m.get("sentDateTime"))
                     if sdt and sdt < cutoff_60:
                         continue
@@ -201,6 +206,9 @@ def run_outlook_tracking() -> dict:
                         key = sdt or now
                         if best is None or key < best[0]:
                             best = (key, m, mb, uid, ea)
+            if best is None and not listing_ok:
+                stats["errors"] += 1
+                continue  # can't tell — don't flag NO_OUTREACH on a Graph failure
             if best is None:
                 with get_db() as db:
                     lead = db.query(Lead).filter_by(id=lead_id).first()

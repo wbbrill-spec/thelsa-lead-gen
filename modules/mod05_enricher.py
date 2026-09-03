@@ -12,6 +12,10 @@ import time
 import requests
 from dataclasses import dataclass
 from modules.mod04_segmentation import SegmentedCandidate
+from modules.llm import ask_json, LLMError
+
+# Per-run enrichment stats, reset by the pipeline runner.
+STATS = {"zoominfo_hits": 0, "web_hits": 0, "empty": 0, "zoominfo_http_errors": 0}
 
 _ZOOMINFO_TOKEN_CACHE = {"token": None, "expires_at": 0}
 
@@ -37,8 +41,10 @@ def enrich_contacts(
     Returns:
         List of new Lead IDs created
     """
+    from pipeline import heartbeat
     lead_ids = []
     for candidate in candidates:
+        heartbeat()
         lead_id = _process_one(candidate, generated_by_user_id)
         if lead_id:
             lead_ids.append(lead_id)
@@ -71,10 +77,11 @@ def _find_direct_contact(company_name: str, domain: str, industry: str) -> dict:
                 "VP Operations", "Director of Logistics", "CEO", "Owner", "President"],
     )
     if zoominfo_result:
+        STATS["zoominfo_hits"] += 1
         return zoominfo_result
 
     # Fallback: web search
-    return _web_search_contact(company_name, domain, industry, contact_type="direct")
+    return _count(_web_search_contact(company_name, domain, industry, contact_type="direct"))
 
 
 def _find_rmc_contact(rmc_name: str) -> dict:
@@ -86,9 +93,18 @@ def _find_rmc_contact(rmc_name: str) -> dict:
                 "Director Supply Chain", "VP Supply Chain", "Operations Manager"],
     )
     if zoominfo_result:
+        STATS["zoominfo_hits"] += 1
         return zoominfo_result
 
-    return _web_search_contact(rmc_name, "", "relocation", contact_type="rmc")
+    return _count(_web_search_contact(rmc_name, "", "relocation", contact_type="rmc"))
+
+
+def _count(contact: dict) -> dict:
+    if contact.get("full_name") or contact.get("email"):
+        STATS["web_hits"] += 1
+    else:
+        STATS["empty"] += 1
+    return contact
 
 
 def _zoominfo_enrich(company_name: str, domain: str, titles: list[str]) -> dict | None:
@@ -135,6 +151,7 @@ def _zoominfo_enrich(company_name: str, domain: str, titles: list[str]) -> dict 
 
         if resp.status_code >= 400:
             # Log the exact error body so a live discovery run reveals any schema mismatch.
+            STATS["zoominfo_http_errors"] += 1
             print(f"[MOD-05] ZoomInfo enrich HTTP {resp.status_code}: {resp.text[:600]}")
             return None
 
@@ -240,7 +257,8 @@ def _web_search_contact(
     else:
         query = f"{company_name} logistics operations manager contact email LinkedIn"
 
-    results = search(query, num_results=5)
+    # No date filter: LinkedIn profile pages are rarely "recent".
+    results = search(query, num_results=5, recency_days=0)
     if not results:
         return _empty_contact()
 
@@ -269,21 +287,8 @@ Only return all-empty values if NONE of the results name a real person associate
 {{"full_name": "", "title": "", "email": "", "phone": ""}}"""
 
     try:
-        import anthropic
-        import config
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-
         def _ask(p: str) -> dict:
-            message = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=150,
-                temperature=0,
-                messages=[{"role": "user", "content": p}]
-            )
-            text = message.content[0].text.strip()
-            text = re.sub(r"^```json\s*", "", text)
-            text = re.sub(r"```$", "", text).strip()
-            return json.loads(text)
+            return ask_json(p, max_tokens=200, expect="object", temperature=0, tag="MOD-05")
 
         data = _ask(prompt)
 
@@ -299,10 +304,11 @@ Only return all-empty values if NONE of the results name a real person associate
             )
             data = _ask(retry_prompt)
 
+        data = {k: (data.get(k) or "") for k in ("full_name", "title", "email", "phone")}
         data["enrichment_source"] = "web_search"
         data["enrichment_raw"] = None
         return data
-    except Exception as e:
+    except LLMError as e:
         print(f"[MOD-05] Web search contact extraction error: {e}")
         return _empty_contact()
 

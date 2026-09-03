@@ -12,6 +12,16 @@ import requests
 import config
 
 
+class SearchError(RuntimeError):
+    """Raised for search failures that will affect every query in the run
+    (bad key, exhausted quota, no key in production). Transient errors are
+    retried and then logged; they do NOT raise."""
+
+
+# Process-wide counters so a run can report what the search layer actually did.
+STATS = {"calls": 0, "failures": 0, "last_error": ""}
+
+
 class SearchResult:
     def __init__(self, title: str, url: str, snippet: str, date: str = ""):
         self.title = title
@@ -45,10 +55,14 @@ def search(query: str, num_results: int = 10, recency_days: int = 30) -> list[Se
 def _search_serpapi(query: str, num_results: int, recency_days: int) -> list[SearchResult]:
     """Search via SerpAPI."""
     if not config.SEARCH_API_KEY:
+        if config.FLASK_ENV == "production":
+            raise SearchError("SEARCH_API_KEY is not set — refusing to use mock search results in production")
         return _mock_search_results(query)
 
-    # Map recency_days to Google's tbs parameter
-    if recency_days <= 7:
+    # Map recency_days to Google's tbs parameter (0 / negative = no date filter)
+    if recency_days <= 0:
+        tbs = ""
+    elif recency_days <= 7:
         tbs = "qdr:w"      # past week
     elif recency_days <= 30:
         tbs = "qdr:m"      # past month
@@ -60,9 +74,12 @@ def _search_serpapi(query: str, num_results: int, recency_days: int) -> list[Sea
         "api_key": config.SEARCH_API_KEY,
         "num": min(num_results, 10),
         "engine": "google",
-        "tbs": tbs,
     }
+    if tbs:
+        params["tbs"] = tbs
 
+    STATS["calls"] += 1
+    last_err = ""
     for attempt in range(3):
         try:
             resp = requests.get(
@@ -70,8 +87,25 @@ def _search_serpapi(query: str, num_results: int, recency_days: int) -> list[Sea
                 params=params,
                 timeout=15,
             )
+            if resp.status_code in (401, 403, 429):
+                # Bad key or quota exhausted — every remaining query would fail too.
+                detail = resp.text[:300]
+                STATS["failures"] += 1
+                STATS["last_error"] = f"SerpAPI HTTP {resp.status_code}: {detail}"
+                raise SearchError(
+                    f"SerpAPI rejected the request (HTTP {resp.status_code}) — "
+                    f"check the key / monthly quota at serpapi.com: {detail}"
+                )
             resp.raise_for_status()
             data = resp.json()
+            if data.get("error"):
+                # SerpAPI returns 200 with an "error" key for some failures
+                # ("Google hasn't returned any results for this query" is benign).
+                err = str(data["error"])
+                if "hasn't returned any results" not in err:
+                    print(f"[MOD-08] SerpAPI error for {query!r}: {err}")
+                    STATS["last_error"] = err
+                return []
             results = []
             for item in data.get("organic_results", []):
                 results.append(SearchResult(
@@ -82,20 +116,27 @@ def _search_serpapi(query: str, num_results: int, recency_days: int) -> list[Sea
                 ))
             return results
         except requests.exceptions.Timeout:
+            last_err = "timeout"
             if attempt < 2:
                 time.sleep(2 ** attempt)
             continue
         except requests.exceptions.RequestException as e:
+            last_err = str(e)
             if attempt < 2:
                 time.sleep(2 ** attempt)
             continue
 
+    STATS["failures"] += 1
+    STATS["last_error"] = f"SerpAPI failed after 3 attempts for {query!r}: {last_err}"
+    print(f"[MOD-08] {STATS['last_error']}")
     return []
 
 
 def _search_perplexity(query: str, num_results: int) -> list[SearchResult]:
     """Search via Perplexity API."""
     if not config.SEARCH_API_KEY:
+        if config.FLASK_ENV == "production":
+            raise SearchError("SEARCH_API_KEY is not set — refusing to use mock search results in production")
         return _mock_search_results(query)
 
     headers = {

@@ -6,10 +6,12 @@ Uses Claude to score and provide reasoning.
 """
 
 from __future__ import annotations
-import json
-import re
 from dataclasses import dataclass
 from modules.mod01_discovery import RawCandidate
+from modules.llm import ask_json, LLMError
+
+# Last-run stats, read by the pipeline runner for the run summary.
+STATS = {"errors": 0, "skipped_names": [], "last_error": ""}
 
 
 @dataclass
@@ -60,9 +62,23 @@ def score_candidates(candidates: list[RawCandidate], run_id: int = None) -> list
 
     qualified = []
     disqualified_count = 0
+    STATS["errors"] = 0
+    STATS["skipped_names"] = []
+    STATS["last_error"] = ""
+    from pipeline import heartbeat
 
     for candidate in candidates:
-        score, reasoning = _score_one(candidate)
+        heartbeat()
+        try:
+            score, reasoning = _score_one(candidate)
+        except LLMError as e:
+            # Transient API failure: skip WITHOUT writing the company to the DB,
+            # so it can be rediscovered and scored on the next run.
+            STATS["errors"] += 1
+            STATS["skipped_names"].append(candidate.name)
+            STATS["last_error"] = str(e)
+            print(f"[MOD-03] Scoring error for {candidate.name} — left for next run: {e}")
+            continue
         if score >= 7:
             qualified.append(ScoredCandidate(
                 candidate=candidate,
@@ -78,43 +94,30 @@ def score_candidates(candidates: list[RawCandidate], run_id: int = None) -> list
     if run_id:
         _update_run_counters(run_id, len(qualified), disqualified_count)
 
+    if candidates and STATS["errors"] == len(candidates):
+        raise LLMError(f"Scoring failed for every candidate ({STATS['errors']}); last error: {STATS['last_error']}")
+
+    print(f"[MOD-03] qualified={len(qualified)} disqualified={disqualified_count} errors={STATS['errors']}")
     return qualified
 
 
 def _score_one(candidate: RawCandidate) -> tuple[int, str]:
-    """Score a single candidate using Claude."""
+    """Score a single candidate using Claude. Raises LLMError on API/parse failure."""
+    prompt = _SCORING_PROMPT.format(
+        name=candidate.name,
+        domain=candidate.domain,
+        country_of_origin=candidate.country_of_origin,
+        expansion_direction=candidate.expansion_direction,
+        industry=candidate.industry,
+        source_snippet=candidate.source_snippet[:500],
+    )
+    data = ask_json(prompt, max_tokens=500, expect="object", tag="MOD-03")
     try:
-        import anthropic
-        import config
-
-        prompt = _SCORING_PROMPT.format(
-            name=candidate.name,
-            domain=candidate.domain,
-            country_of_origin=candidate.country_of_origin,
-            expansion_direction=candidate.expansion_direction,
-            industry=candidate.industry,
-            source_snippet=candidate.source_snippet[:500],
-        )
-
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        response_text = message.content[0].text.strip()
-        response_text = re.sub(r"^```json\s*", "", response_text)
-        response_text = re.sub(r"```$", "", response_text).strip()
-
-        data = json.loads(response_text)
         score = max(1, min(10, int(data.get("score", 1))))
-        reasoning = data.get("reasoning", "")
-        return score, reasoning
-
-    except Exception as e:
-        print(f"[MOD-03] Scoring error for {candidate.name}: {e}")
-        return 1, f"Scoring failed: {e}"
+    except (TypeError, ValueError) as e:
+        raise LLMError(f"score was not a number: {data.get('score')!r}") from e
+    reasoning = str(data.get("reasoning", ""))
+    return score, reasoning
 
 
 def _log_disqualified(candidate: RawCandidate, score: int, reasoning: str):

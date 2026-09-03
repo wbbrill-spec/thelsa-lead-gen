@@ -6,10 +6,15 @@ Deduplicates candidates within the same run before passing downstream.
 """
 
 from __future__ import annotations
-import re
 from dataclasses import dataclass, field
-from modules.mod08_search import search, SearchResult
+from modules.mod08_search import search, SearchResult, STATS as SEARCH_STATS
 from modules.mod09_query_rotator import get_queries_for_run
+from modules.llm import ask_json, LLMError
+
+
+class DiscoveryError(RuntimeError):
+    """Raised when discovery cannot produce a trustworthy result. The run is
+    marked FAILED with this message instead of silently completing with 0 leads."""
 
 
 @dataclass
@@ -34,19 +39,33 @@ def run_discovery(run_id: int) -> list[RawCandidate]:
         List of RawCandidate objects, deduplicated by domain within this run
     """
     query_pairs = get_queries_for_run()  # list of (id, query_string)
+    if not query_pairs:
+        raise DiscoveryError("No search queries available — query_bank.json missing or empty")
+
     all_results: list[SearchResult] = []
+    failures_before = SEARCH_STATS["failures"]
+    SEARCH_STATS["last_error"] = ""
 
     for qid, query in query_pairs:
-        results = search(query, num_results=10, recency_days=180)
+        results = search(query, num_results=10, recency_days=180)  # raises SearchError on key/quota problems
         for r in results:
             r._query = query  # tag with originating query
         all_results.extend(results)
+        print(f"[MOD-01] {qid}: {len(results)} results for {query!r}")
 
     # Update discovery run with queries used (store IDs for proper rotation)
     _update_run_queries(run_id, query_pairs)
 
-    # Extract candidates from search results
+    if not all_results:
+        failed = SEARCH_STATS["failures"] - failures_before
+        raise DiscoveryError(
+            f"All {len(query_pairs)} searches returned zero results "
+            f"({failed} failed outright; last error: {SEARCH_STATS['last_error'] or 'none'})"
+        )
+
+    # Extract candidates from search results (raises DiscoveryError on Claude failure)
     candidates = _extract_candidates(all_results)
+    print(f"[MOD-01] {len(all_results)} search results → {len(candidates)} candidate companies")
 
     # Deduplicate within this run by domain
     seen_domains: set[str] = set()
@@ -118,41 +137,28 @@ Example format:
 If no qualifying companies are found, return an empty array: []"""
 
     try:
-        import anthropic
-        import config
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        response_text = message.content[0].text.strip()
+        data = ask_json(prompt, max_tokens=8000, expect="array", tag="MOD-01")
+    except LLMError as e:
+        # Do NOT swallow this: a failed extraction must fail the run loudly,
+        # otherwise it looks like "no companies in the news today".
+        raise DiscoveryError(f"Candidate extraction failed: {e}") from e
 
-        # Clean any accidental markdown fences
-        response_text = re.sub(r"^```json\s*", "", response_text)
-        response_text = re.sub(r"```$", "", response_text).strip()
-
-        data = __import__("json").loads(response_text)
-
-        candidates = []
-        for item in data:
-            if not item.get("company_name") or not item.get("domain"):
-                continue
-            candidates.append(RawCandidate(
-                name=item["company_name"],
-                domain=item["domain"].lower().strip(),
-                country_of_origin=item.get("country_of_origin", "MX"),
-                expansion_direction=item.get("expansion_direction", "MX_to_US"),
-                industry=item.get("industry", "other"),
-                source_url=item.get("source_url", ""),
-                source_snippet=item.get("source_snippet", ""),
-            ))
-        return candidates
-
-    except Exception as e:
-        # Log error but don't crash the run
-        print(f"[MOD-01] Extraction error: {e}")
-        return []
+    candidates = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        if not item.get("company_name") or not item.get("domain"):
+            continue
+        candidates.append(RawCandidate(
+            name=str(item["company_name"]).strip(),
+            domain=str(item["domain"]).lower().strip().removeprefix("https://").removeprefix("http://").removeprefix("www.").rstrip("/"),
+            country_of_origin=item.get("country_of_origin", "MX"),
+            expansion_direction=item.get("expansion_direction", "MX_to_US"),
+            industry=item.get("industry", "other"),
+            source_url=item.get("source_url", ""),
+            source_snippet=item.get("source_snippet", ""),
+        ))
+    return candidates
 
 
 def _update_run_queries(run_id: int, query_pairs: list[tuple[str, str]]):

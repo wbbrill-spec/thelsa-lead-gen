@@ -6,11 +6,10 @@ If no RMC found for LARGE_CORP, reverts to SMB flow.
 """
 
 from __future__ import annotations
-import json
-import re
 from dataclasses import dataclass
 from modules.mod03_scorer import ScoredCandidate
 from modules.mod08_search import search
+from modules.llm import ask_json, LLMError
 
 
 @dataclass
@@ -40,8 +39,10 @@ def segment_and_detect_rmc(candidates: list[ScoredCandidate]) -> list[SegmentedC
     Returns:
         List of SegmentedCandidate with size_tier and RMC data populated
     """
+    from pipeline import heartbeat
     results = []
     for candidate in candidates:
+        heartbeat()
         segmented = _process_one(candidate)
         results.append(segmented)
     return results
@@ -98,22 +99,12 @@ or
 {{"tier": "LARGE_CORP", "reasoning": "Recognized Fortune 500 manufacturer with $2B revenue"}}"""
 
     try:
-        import anthropic
-        import config
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=150,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        text = message.content[0].text.strip()
-        text = re.sub(r"^```json\s*", "", text)
-        text = re.sub(r"```$", "", text).strip()
-        data = json.loads(text)
-        return data.get("tier", "SMB")
-    except Exception as e:
+        data = ask_json(prompt, max_tokens=200, expect="object", tag="MOD-04")
+        tier = str(data.get("tier", "SMB")).upper()
+        return "LARGE_CORP" if tier == "LARGE_CORP" else "SMB"
+    except LLMError as e:
         print(f"[MOD-04] Size classification error for {c.name}: {e}")
-        return "SMB"  # Safe default
+        return "SMB"  # Safe, non-destructive default
 
 
 def _detect_rmc(candidate: ScoredCandidate) -> tuple[bool, str]:
@@ -146,21 +137,10 @@ or
 {{"rmc_found": false, "rmc_name": "", "confidence": "high"}}"""
 
     try:
-        import anthropic
-        import config
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=100,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        text = message.content[0].text.strip()
-        text = re.sub(r"^```json\s*", "", text)
-        text = re.sub(r"```$", "", text).strip()
-        data = json.loads(text)
-        rmc_found = data.get("rmc_found", False)
-        rmc_name = data.get("rmc_name", "")
+        data = ask_json(prompt, max_tokens=150, expect="object", tag="MOD-04")
+        rmc_found = bool(data.get("rmc_found", False))
+        rmc_name = str(data.get("rmc_name", "") or "")
         return rmc_found, rmc_name
-    except Exception as e:
+    except LLMError as e:
         print(f"[MOD-04] RMC detection error for {c.name}: {e}")
         return False, ""

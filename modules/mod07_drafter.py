@@ -452,22 +452,18 @@ def _generate_email(ctx: dict, draft_type: str, lang: str) -> tuple[str, str]:
         cta=ctx["cta_es"] if lang == "ES" else ctx["cta_en"],
     )
 
+    from modules.llm import ask_json, LLMError
     try:
-        import re
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        text = message.content[0].text.strip()
-        text = re.sub(r"^```json\s*", "", text)
-        text = re.sub(r"```$", "", text).strip()
-        data = json.loads(text)
-        return data.get("subject", ""), data.get("body", "")
-    except Exception as e:
-        print(f"[MOD-07] Email generation error ({draft_type}/{lang}): {e}")
-        return f"Following up — Thelsa", f"[Email generation failed: {e}]"
+        data = ask_json(prompt, max_tokens=600, expect="object", tag="MOD-07")
+    except LLMError as e:
+        # Never fall back to a placeholder body — a real Outlook/Gmail draft
+        # reading "[Email generation failed]" used to be created from it.
+        raise RuntimeError(f"Email generation failed ({draft_type}/{lang}): {e}") from e
+    subject = str(data.get("subject", "") or "").strip()
+    body = str(data.get("body", "") or "").strip()
+    if not subject or not body:
+        raise RuntimeError(f"Email generation returned an empty subject/body ({draft_type}/{lang})")
+    return subject, body
 
 
 def _create_gmail_draft(
