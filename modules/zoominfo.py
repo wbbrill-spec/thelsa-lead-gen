@@ -41,7 +41,7 @@ OUTPUT_FIELDS = [
 
 _TOKEN = {"token": None, "expires_at": 0.0}
 _TOKEN_LOCK = threading.Lock()
-_WORKING_ENRICH_ENVELOPE = {"idx": None}   # remembered across calls in this process
+_WORKING_ENRICH_ENVELOPE = {"idx": 0}   # #0 = {"data":{"type":"ContactEnrich","attributes":{...}}} — verified live 2026-09-03
 
 # The GTM API is JSON:API; it answers 406 "Not Acceptable" to Accept: application/json.
 _MEDIA_TYPES = ["application/vnd.api+json", "application/json"]
@@ -146,7 +146,10 @@ _FIELD_RENAMES = {
     "requiredFieldsList": ("requiredFields", lambda v: ",".join(v)),
     "managementLevelList": ("managementLevel", lambda v: ",".join(v)),
 }
-_FIELD_FIXES: dict = {}   # remembered: original field → ("rename"|"drop")
+# Verified live 2026-09-03: the REST API wants the legacy spellings
+# (jobTitle with " OR ", requiredFields comma-joined), not the *List names.
+_FIELD_FIXES: dict = {"jobTitleList": "rename", "requiredFieldsList": "rename",
+                      "managementLevelList": "rename"}
 
 
 def _adapt_attrs(attrs: dict) -> dict:
@@ -255,9 +258,8 @@ def enrich_person(person_id: str | None = None, **match_fields) -> dict | None:
     match = {"personId": person_id} if person_id else dict(match_fields)
     envelopes = _enrich_envelopes(match)
     order = list(range(len(envelopes)))
-    if _WORKING_ENRICH_ENVELOPE["idx"] is not None:
-        order.remove(_WORKING_ENRICH_ENVELOPE["idx"])
-        order.insert(0, _WORKING_ENRICH_ENVELOPE["idx"])
+    order.remove(_WORKING_ENRICH_ENVELOPE["idx"])
+    order.insert(0, _WORKING_ENRICH_ENVELOPE["idx"])
 
     STATS["enrich_calls"] += 1
     last = None
@@ -286,36 +288,52 @@ def enrich_person(person_id: str | None = None, **match_fields) -> dict | None:
     return None
 
 
-def extract_person(obj) -> dict | None:
-    """Walk any response shape and return the first record with name/email fields."""
+def extract_person(obj, parent_id=None) -> dict | None:
+    """Walk any response shape and return the first record with name/email fields.
+    Live response shape (2026-09-03): {"data":[{"id": "...", "type":"Contact",
+    "attributes": {firstName, lastName, email, phone, mobilePhone, jobTitle,
+    contactAccuracyScore, managementLevel:[..], externalUrls:[{type,url}],
+    directPhoneDoNotCall, mobilePhoneDoNotCall}, "meta": {"matchStatus": ...}}]}"""
     if isinstance(obj, dict):
         lower = {k.lower(): v for k, v in obj.items()}
         if ("firstname" in lower or "lastname" in lower) and ("email" in lower or "jobtitle" in lower):
-            ext = lower.get("externalurls") or {}
+            ext = lower.get("externalurls") or []
             linkedin = ""
             if isinstance(ext, dict):
                 linkedin = ext.get("linkedin") or ext.get("linkedIn") or ""
             elif isinstance(ext, list):
-                linkedin = next((u for u in ext if isinstance(u, str) and "linkedin" in u.lower()), "")
+                for u in ext:
+                    url = u.get("url", "") if isinstance(u, dict) else (u if isinstance(u, str) else "")
+                    if "linkedin" in url.lower():
+                        linkedin = url
+                        break
+            ml = lower.get("managementlevel") or ""
+            if isinstance(ml, list):
+                ml = ", ".join(str(x) for x in ml)
+            # Respect Do-Not-Call flags: never hand a rep a number they must not dial.
+            phone = "" if lower.get("directphonedonotcall") else (lower.get("phone") or "")
+            mobile = "" if lower.get("mobilephonedonotcall") else (lower.get("mobilephone") or "")
             return {
                 "firstName": lower.get("firstname") or "",
                 "lastName": lower.get("lastname") or "",
                 "jobTitle": lower.get("jobtitle") or lower.get("title") or "",
                 "email": lower.get("email") or "",
-                "phone": lower.get("phone") or "",
-                "mobilePhone": lower.get("mobilephone") or "",
+                "phone": phone,
+                "mobilePhone": mobile,
                 "contactAccuracyScore": lower.get("contactaccuracyscore"),
-                "managementLevel": lower.get("managementlevel") or "",
+                "managementLevel": ml,
                 "linkedin": linkedin,
-                "personId": lower.get("id") or lower.get("personid"),
+                "personId": lower.get("id") or lower.get("personid") or parent_id,
+                "company": (lower.get("company") or {}).get("name") if isinstance(lower.get("company"), dict) else "",
             }
+        pid = obj.get("id") if isinstance(obj.get("attributes"), dict) else parent_id
         for v in obj.values():
-            found = extract_person(v)
+            found = extract_person(v, pid)
             if found:
                 return found
     elif isinstance(obj, list):
         for v in obj:
-            found = extract_person(v)
+            found = extract_person(v, parent_id)
             if found:
                 return found
     return None
