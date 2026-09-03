@@ -64,6 +64,10 @@ Deployed via commit `5bbb10f` ("Fix discovery pipeline: extend search window to 
 5. **Microsoft Graph**: token cached (was one token request per Graph call → AAD throttling), 429/5xx retried with `Retry-After`; a failed Sent-folder listing now raises instead of returning a partial list that flagged real leads `NO_OUTREACH`.
 6. **Config validation**: `config.config_warnings()` logged at boot, shown on `/runs` and in `/health`.
 
+**2026-09-03 — ZoomInfo enrichment rewritten + SerpAPI quota guard.**
+- Root cause of "0 leads for a week every month": the SerpAPI monthly quota runs out ~3½ weeks in (runs Jul 25–Aug 3 and Aug 30–Sep 2 all returned 0 with HTTP 429 "Your account has run out of searches", which the old code swallowed). Now the run checks `https://serpapi.com/account` first, logs "N searches left", refuses to start below `SEARCH_MIN_LEFT` (15), and the Runs page shows the remaining quota.
+- ZoomInfo: the old enrich call sent only `companyName + jobTitle`, which is not a valid person identifier for `/contacts/enrich`, so it never matched. New `modules/zoominfo.py` does the documented two-step flow: `POST /gtm/data/v1/contacts/search` (JSON:API envelope `{"data":{"type":"ContactSearch","attributes":{companyWebsite|companyName, jobTitleList, requiredFieldsList:["email"]}}}`, sorted by `-contactAccuracyScore`) → `POST /gtm/data/v1/contacts/enrich` by `personId`. The enrich envelope `type` is not documented publicly, so the client tries a short list of envelopes on HTTP 400 and remembers the one that works. `/admin/zoominfo-test?token=CRON_TOKEN&company=…&domain=…` runs the flow once and returns every raw request/response.
+
 ## Notes
 
 - Never reference insurance products/coverage anywhere in Thelsa-facing content — Thelsa is a moving/relocation company.

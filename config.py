@@ -38,6 +38,9 @@ CLAUDE_MAX_RETRIES = int(os.environ.get("CLAUDE_MAX_RETRIES", "5"))
 # A RUNNING discovery run whose heartbeat is older than this is considered dead
 # (process restarted / deploy mid-run) and is marked FAILED by the reaper.
 RUN_STALE_MINUTES = int(os.environ.get("RUN_STALE_MINUTES", "45"))
+# Refuse to start a discovery run when SerpAPI has fewer searches left than this
+# (a run uses ~8 discovery searches + 1 per contact fallback + 1 per large corp).
+SEARCH_MIN_LEFT = int(os.environ.get("SEARCH_MIN_LEFT", "15"))
 
 # ── Web Search ─────────────────────────────────────────────────────────────────
 SEARCH_API_KEY = os.environ.get("SEARCH_API_KEY", "")

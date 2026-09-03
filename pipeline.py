@@ -160,6 +160,18 @@ def execute_run(run_id: int, user_id: int | None) -> None:
     search_calls_before = mod08_search.STATS["calls"]
 
     try:
+        acct = mod08_search.account_status()
+        if acct:
+            left = acct.get("total_searches_left", acct.get("plan_searches_left"))
+            log.note(f"SerpAPI: {left} searches left this month "
+                     f"({acct.get('this_month_usage', '?')}/{acct.get('searches_per_month', '?')} used"
+                     f"{', ' + str(acct.get('plan_name')) if acct.get('plan_name') else ''})"
+                     if "error" not in acct else f"SerpAPI account check failed: {acct['error']}")
+            if left is not None and int(left) < config.SEARCH_MIN_LEFT:
+                raise mod08_search.SearchError(
+                    f"SerpAPI quota nearly exhausted ({left} searches left; a run needs ~{config.SEARCH_MIN_LEFT}). "
+                    f"Upgrade the plan at serpapi.com or wait for the monthly reset.")
+
         candidates = run_discovery(run_id=run_id)
         log.stage("dedup", f"{len(candidates)} candidate companies from "
                            f"{mod08_search.STATS['calls'] - search_calls_before} searches")
@@ -265,6 +277,9 @@ class _RunLog:
             for k, v in fields.items():
                 setattr(run, k, v)
         print(f"[PIPELINE] run {self.run_id}: {line}")
+
+    def note(self, line: str):
+        self._append(line)
 
     def stage(self, name: str, note: str = ""):
         self.current_stage = name
