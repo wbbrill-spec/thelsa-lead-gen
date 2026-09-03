@@ -26,6 +26,17 @@
   </div>
 </div>
 
+<!-- Last run banner (pending view only) -->
+{% if view == 'pending' and last_run and last_run.exists %}
+  {% if last_run.status == 'RUNNING' %}
+  <div class="flash flash-info">Discovery run #{{ last_run.id }} is in progress (stage: {{ last_run.stage }}). <a href="/runs" style="color:inherit;">View progress →</a></div>
+  {% elif last_run.status == 'FAILED' %}
+  <div class="flash flash-error">Last discovery run #{{ last_run.id }} FAILED: {{ last_run.error_message }} <a href="/runs" style="color:inherit;">Details →</a></div>
+  {% else %}
+  <div class="flash flash-info" style="opacity:.85;">Last run #{{ last_run.id }} ({{ last_run.started_at.strftime('%b %d %H:%M') }} UTC): {{ last_run.companies_discovered }} found, {{ last_run.leads_qualified }} qualified, {{ last_run.leads_created }} new lead(s). <a href="/runs" style="color:inherit;">All runs →</a></div>
+  {% endif %}
+{% endif %}
+
 <!-- Stats row (pending view only) -->
 {% if view == 'pending' %}
 <div class="flex gap-16" style="margin-bottom: 24px;">

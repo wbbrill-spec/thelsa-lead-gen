@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Discovery Runs{% endblock %}
+
+{% block head %}
+<style>
+  .run-row td { vertical-align: top; }
+  .status-pill { display:inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  .status-RUNNING { background: #0c2340; color: #60a5fa; border: 1px solid #1e3a5f; }
+  .status-COMPLETED { background: var(--green-bg); color: var(--green); border: 1px solid #166534; }
+  .status-FAILED { background: var(--red-bg); color: var(--red); border: 1px solid #7f1d1d; }
+  .status-unknown { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+  .summary { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--text-dim); background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-top: 6px; max-height: 220px; overflow: auto; }
+  .err { color: var(--red); font-size: 12.5px; margin-top: 4px; white-space: pre-wrap; }
+  details > summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .spinner { display:inline-block; width: 10px; height: 10px; border: 2px solid #60a5fa; border-top-color: transparent; border-radius: 50%; animation: spin 0.9s linear infinite; vertical-align: -1px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .warn-box { background: var(--yellow-bg); color: var(--yellow); border: 1px solid #78350f; border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 16px; }
+  .warn-box ul { margin: 6px 0 0 18px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex-between" style="margin-bottom: 20px;">
+  <div>
+    <h1 style="font-size: 20px; font-weight: 700;">Discovery Runs</h1>
+    <div class="text-muted text-small mt-8">
+      Every pipeline run, what it found, and why it failed if it did. Model: <code>{{ model }}</code>
+      {% if any_running %}<span style="margin-left:10px;"><span class="spinner"></span>a run is in progress — refreshing every 20s</span>{% endif %}
+    </div>
+  </div>
+  <div class="flex gap-8">
+    <a href="/" class="btn btn-ghost btn-sm">← Dashboard</a>
+    <form method="POST" action="/pipeline/run" style="display:inline;">
+      <button type="submit" class="btn btn-primary btn-sm" {% if any_running %}disabled title="A run is already in progress"{% endif %}>▶ Run Discovery</button>
+    </form>
+  </div>
+</div>
+
+{% if config_warnings %}
+<div class="warn-box">
+  <strong>Configuration warnings</strong> — these will make runs fail or behave unexpectedly:
+  <ul>{% for w in config_warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="card">
+  {% if runs %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Started</th>
+        <th>Status</th>
+        <th>Stage</th>
+        <th class="num">Found</th>
+        <th class="num">Dupes</th>
+        <th class="num">Qualified</th>
+        <th class="num">Leads</th>
+        <th class="num">Contacts</th>
+        <th>Trigger</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in runs %}
+      <tr class="run-row">
+        <td>{{ r.id }}</td>
+        <td class="text-dim text-small">
+          {{ r.started_at.strftime('%b %d %H:%M') if r.started_at else '—' }} UTC
+          {% if r.duration_seconds %}<div class="text-muted">{{ (r.duration_seconds // 60)|int }}m {{ (r.duration_seconds % 60)|int }}s</div>{% endif %}
+        </td>
+        <td><span class="status-pill status-{{ r.status or 'unknown' }}">{% if r.status == 'RUNNING' %}<span class="spinner"></span>{% endif %}{{ r.status or '?' }}</span></td>
+        <td class="text-dim">{{ r.stage or '—' }}</td>
+        <td class="num">{{ r.companies_discovered or 0 }}</td>
+        <td class="num text-muted">{{ r.companies_skipped_dupe or 0 }}</td>
+        <td class="num">{{ r.leads_qualified or 0 }}</td>
+        <td class="num" style="font-weight:700; color: {% if (r.leads_created or 0) > 0 %}var(--green){% else %}inherit{% endif %};">{{ r.leads_created or 0 }}</td>
+        <td class="num text-dim">{{ r.contacts_found or 0 }}{% if r.contacts_zoominfo %} <span class="text-muted">({{ r.contacts_zoominfo }} ZI)</span>{% endif %}</td>
+        <td class="text-muted text-small">{{ r.triggered_by or (r.run_by_user.full_name if r.run_by_user else '—') }}</td>
+        <td style="max-width: 420px;">
+          {% if r.error_message %}<div class="err">{{ r.error_message }}</div>{% endif %}
+          {% if r.summary %}
+          <details {% if r.status == 'RUNNING' or loop.first %}open{% endif %}>
+            <summary>log</summary>
+            <div class="summary">{{ r.summary }}</div>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="text-muted" style="padding: 24px; text-align: center;">No discovery runs yet.</div>
+  {% endif %}
+</div>
+
+{% if any_running %}
+<script>setTimeout(function(){ window.location.reload(); }, 20000);</script>
+{% endif %}
+{% endblock %}
