@@ -138,11 +138,66 @@ def search_people(company_name: str, domain: str, titles: list[str],
     return []
 
 
+# The REST API's attribute names differ from the MCP tool's. When the API
+# rejects a field ("Invalid field requested" with a JSON pointer), rename it to
+# the legacy spelling below, and if that is rejected too, drop it.
+_FIELD_RENAMES = {
+    "jobTitleList": ("jobTitle", lambda v: " OR ".join(v)),
+    "requiredFieldsList": ("requiredFields", lambda v: ",".join(v)),
+    "managementLevelList": ("managementLevel", lambda v: ",".join(v)),
+}
+_FIELD_FIXES: dict = {}   # remembered: original field → ("rename"|"drop")
+
+
+def _adapt_attrs(attrs: dict) -> dict:
+    out = dict(attrs)
+    for field, fix in _FIELD_FIXES.items():
+        if field in out:
+            v = out.pop(field)
+            if fix == "rename" and field in _FIELD_RENAMES:
+                new, conv = _FIELD_RENAMES[field]
+                out[new] = conv(v) if isinstance(v, list) else v
+    return out
+
+
+def _rejected_fields(body) -> list[str]:
+    fields = []
+    for err in (body.get("errors") or []) if isinstance(body, dict) else []:
+        ptr = ((err or {}).get("source") or {}).get("pointer", "")
+        if ptr.startswith("/data/attributes/"):
+            fields.append(ptr.split("/")[3])
+    return fields
+
+
+def search_request(attrs: dict, page_size: int) -> requests.Response:
+    """POST a contact search, adapting field names the API rejects (max 4 tries)."""
+    r = None
+    for _ in range(4):
+        payload = {"data": {"type": "ContactSearch", "attributes": _adapt_attrs(attrs)}}
+        r = _post("/data/v1/contacts/search", payload,
+                  params={"page[size]": page_size, "sort": "-contactAccuracyScore"})
+        if r.status_code != 400:
+            return r
+        bad = _rejected_fields(_safe_json(r))
+        if not bad:
+            return r
+        changed = False
+        for name in bad:
+            # name may be the renamed field; find the original
+            orig = next((o for o, (n, _) in _FIELD_RENAMES.items() if n == name), name)
+            if _FIELD_FIXES.get(orig) is None and orig in _FIELD_RENAMES:
+                _FIELD_FIXES[orig] = "rename"; changed = True
+            elif _FIELD_FIXES.get(orig) != "drop":
+                _FIELD_FIXES[orig] = "drop"; changed = True
+            print(f"[ZI] search: API rejected field {name!r} → {_FIELD_FIXES.get(orig)}")
+        if not changed:
+            return r
+    return r
+
+
 def _search_once(attrs: dict, page_size: int) -> list[dict]:
     STATS["search_calls"] += 1
-    payload = {"data": {"type": "ContactSearch", "attributes": attrs}}
-    r = _post("/data/v1/contacts/search", payload,
-              params={"page[size]": page_size, "sort": "-contactAccuracyScore"})
+    r = search_request(attrs, page_size)
     if r.status_code >= 400:
         STATS["http_errors"] += 1
         STATS["last_error"] = f"search HTTP {r.status_code}: {r.text[:400]}"
@@ -317,9 +372,9 @@ def diagnose(company_name: str, domain: str, titles: list[str]) -> dict:
     attrs = {"companyWebsite": _website(domain)} if domain else {"companyName": company_name}
     attrs["jobTitleList"] = [_clean_title(t) for t in titles]
     attrs["requiredFieldsList"] = ["email"]
-    payload = {"data": {"type": "ContactSearch", "attributes": attrs}}
-    r = _post("/data/v1/contacts/search", payload, params={"page[size]": 5, "sort": "-contactAccuracyScore"})
-    out["search"] = {"request": payload, "status": r.status_code, "response": _safe_json(r)}
+    r = search_request(attrs, 5)
+    out["search"] = {"request": {"data": {"type": "ContactSearch", "attributes": _adapt_attrs(attrs)}},
+                     "field_fixes": dict(_FIELD_FIXES), "status": r.status_code, "response": _safe_json(r)}
     people = _people_from(r.json()) if r.status_code < 400 else []
     out["people"] = people
     if people:
