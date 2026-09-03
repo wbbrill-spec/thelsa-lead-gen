@@ -17,8 +17,10 @@ POST /leads/<id>/approve    → approve lead, trigger email drafting
 POST /leads/<id>/skip       → skip lead
 POST /leads/<id>/assign     → reassign lead to another user
 POST /leads/<id>/mark-sent  → mark initial email as sent, schedule follow-ups
-GET  /pipeline/run          → trigger a discovery run (GET for simplicity in dashboard)
-GET  /health                → health check (used by Render)
+POST /pipeline/run          → start a discovery run in the background
+GET  /runs                  → run history / progress page
+GET  /runs/<id>.json        → run status (polled by the runs page)
+GET  /health                → health check (used by Render) incl. config warnings
 """
 
 from __future__ import annotations
@@ -33,16 +35,23 @@ from flask import (
 )
 
 import config
-from models import create_all_tables, User, Lead, Company, Contact, EmailDraft
+from models import create_all_tables, User, Lead, Company, Contact, EmailDraft, DiscoveryRun
 from db import get_db
 from web_auth import WebAuthFlow, WebAuthError
+import pipeline
 
 # ── App setup ──────────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
-create_all_tables()  # runs on gunicorn import — creates tables if they don't exist
+create_all_tables()  # runs on gunicorn import — creates tables / adds new columns
 app.secret_key = config.FLASK_SECRET_KEY
 app.permanent_session_lifetime = timedelta(days=7)
+
+CONFIG_WARNINGS = config.log_config_warnings("APP")
+try:
+    pipeline.reap_stale_runs()  # a deploy kills in-flight runs; mark them FAILED
+except Exception as _exc:  # never block boot on this
+    print(f"[APP] reap_stale_runs failed: {_exc}")
 
 # ── Auth helpers (matching Library pattern exactly) ────────────────────────────
 
@@ -171,6 +180,7 @@ def dashboard():
         total_leads=total_leads,
         responded=responded,
         call_required=call_required,
+        last_run=pipeline.last_run_status(),
         user_email=session["user_email"],
         user_name=session.get("user_name", ""),
     )
@@ -389,51 +399,78 @@ def mark_sent(lead_id: int):
 
 @app.route("/pipeline/run", methods=["POST"])
 def run_pipeline():
+    """Start a discovery run in the background and return immediately.
+
+    The run takes 5–20 minutes; progress is on the Runs page. A second click
+    while a run is in progress is refused instead of starting a duplicate.
+    """
     if redir := _require_auth():
         return redir
 
-    with get_db() as db:
-        from models import DiscoveryRun
-        run = DiscoveryRun(
-            run_by_user_id=session["user_id"],
-            status="RUNNING",
-        )
-        db.add(run)
-        db.flush()
-        run_id = run.id
-
     try:
-        from modules.mod01_discovery import run_discovery
-        from modules.mod02_deduplication import deduplicate
-        from modules.mod03_scorer import score_candidates
-        from modules.mod04_segmentation import segment_and_detect_rmc
-        from modules.mod05_enricher import enrich_contacts
-
-        candidates = run_discovery(run_id=run_id)
-        net_new = deduplicate(candidates, run_id=run_id)
-        qualified = score_candidates(net_new, run_id=run_id)
-        segmented = segment_and_detect_rmc(qualified)
-        enrich_contacts(segmented, run_id=run_id, generated_by_user_id=session["user_id"])
-
-        with get_db() as db:
-            from models import DiscoveryRun
-            run = db.query(DiscoveryRun).filter_by(id=run_id).first()
-            if run:
-                from datetime import datetime, timezone
-                run.completed_at = datetime.now(timezone.utc)
-                run.status = "COMPLETED"
-
-        flash(f"Discovery run complete. Check the dashboard for new leads.", "success")
+        run_id = pipeline.start_run(user_id=session["user_id"], triggered_by=f"dashboard:{session.get('user_name', '')}"[:40])
+    except pipeline.RunAlreadyInProgress as exc:
+        flash(f"{exc}. Wait for it to finish — progress is shown below.", "warning")
+        return redirect(url_for("runs"))
     except Exception as exc:
-        with get_db() as db:
-            from models import DiscoveryRun
-            run = db.query(DiscoveryRun).filter_by(id=run_id).first()
-            if run:
-                run.status = "FAILED"
-                run.error_message = str(exc)
-        flash(f"Discovery run failed: {exc}", "error")
+        flash(f"Could not start discovery run: {exc}", "error")
+        return redirect(url_for("dashboard"))
 
-    return redirect(url_for("dashboard"))
+    flash(f"Discovery run #{run_id} started. It usually takes 5–20 minutes; "
+          f"this page refreshes automatically.", "success")
+    return redirect(url_for("runs"))
+
+
+# ── Routes: Runs ───────────────────────────────────────────────────────────────
+
+@app.route("/runs")
+def runs():
+    if redir := _require_auth():
+        return redir
+    pipeline.reap_stale_runs()
+    with get_db() as db:
+        run_rows = (
+            db.query(DiscoveryRun)
+            .options(joinedload(DiscoveryRun.run_by_user))
+            .order_by(DiscoveryRun.started_at.desc())
+            .limit(50)
+            .all()
+        )
+    any_running = any(r.status == DiscoveryRun.STATUS_RUNNING for r in run_rows)
+    return render_template(
+        "runs.html",
+        runs=run_rows,
+        any_running=any_running,
+        config_warnings=CONFIG_WARNINGS,
+        model=config.CLAUDE_MODEL,
+        user_email=session["user_email"],
+        user_name=session.get("user_name", ""),
+    )
+
+
+@app.route("/runs/<int:run_id>.json")
+def run_json(run_id: int):
+    if "user_id" not in session:
+        return jsonify({"error": "unauthorized"}), 401
+    with get_db() as db:
+        r = db.query(DiscoveryRun).filter_by(id=run_id).first()
+        if not r:
+            return jsonify({"error": "not found"}), 404
+        return jsonify({
+            "id": r.id, "status": r.status, "stage": r.stage,
+            "started_at": r.started_at.isoformat() if r.started_at else None,
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+            "heartbeat_at": r.heartbeat_at.isoformat() if r.heartbeat_at else None,
+            "companies_discovered": r.companies_discovered,
+            "companies_skipped_dupe": r.companies_skipped_dupe,
+            "leads_qualified": r.leads_qualified,
+            "leads_disqualified": r.leads_disqualified,
+            "leads_created": r.leads_created,
+            "contacts_found": r.contacts_found,
+            "contacts_zoominfo": r.contacts_zoominfo,
+            "error_message": r.error_message,
+            "summary": r.summary,
+        })
 
 
 # ── Routes: Utility ────────────────────────────────────────────────────────────
@@ -452,7 +489,16 @@ def cron_run():
     if not token or request.args.get("token") != token:
         return ("forbidden", 403)
     import scheduler
-    threading.Thread(target=scheduler.run_cycle, daemon=True).start()
+    if not scheduler.CYCLE_LOCK.acquire(blocking=False):
+        return jsonify({"ok": False, "started": False, "reason": "a cycle is already running"}), 409
+
+    def _run():
+        try:
+            scheduler.run_cycle(triggered_by="cron")
+        finally:
+            scheduler.CYCLE_LOCK.release()
+
+    threading.Thread(target=_run, name="cron-cycle", daemon=False).start()
     return jsonify({"ok": True, "started": True})
 
 
@@ -498,7 +544,12 @@ def zoominfo_test():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "service": "tms-leadgen"})
+    return jsonify({
+        "status": "ok",
+        "service": "tms-leadgen",
+        "model": config.CLAUDE_MODEL,
+        "config_warnings": CONFIG_WARNINGS,
+    })
 
 
 # ── Startup ────────────────────────────────────────────────────────────────────

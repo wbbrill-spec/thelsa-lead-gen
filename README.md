@@ -26,6 +26,8 @@ Run roughly in this order:
 ## Other key files
 
 - `app.py` — Flask app / dashboard routes
+- `pipeline.py` — background discovery runner, run lock, stale-run reaper, run summary
+- `modules/llm.py` — shared Claude client (`CLAUDE_MODEL`), tolerant JSON parsing
 - `web_auth.py` — Gmail OAuth per user
 - `config.py`, `render.yaml`, `Procfile`, `requirements.txt` — deployment config
 - `query_bank.json` — search query bank
@@ -53,6 +55,14 @@ Deployed via commit `c12e1c1` ("Fix deprecated model in mod01/mod03/mod04 — re
 Deployed via commit `5bbb10f` ("Fix discovery pipeline: extend search window to 1yr, send 50 results to Claude, fix query rotation"). Verified: 9 new leads generated (Nestlé, Bulkmatic, AutoZone, Amazon, Panduit, Technimark, Deacero, PepsiCo, Coca-Cola).
 
 **2026-06-18** — `app.py` was calling `deduplicate()` and `score_candidates()` without `run_id`, so discovery run counters (`companies_discovered`, `leads_qualified`, `leads_disqualified`) were always 0 even when leads were generated. Fixed: pass `run_id=run_id` to both calls. Deployed via commit `0ae2dec`.
+
+**2026-09-02 — Reliability overhaul (Fable takeover).** Root causes of "it often breaks down" and their fixes:
+1. **Discovery ran inside the web request** (5–20 min) → Render's proxy timed out, users re-clicked, runs overlapped, and a deploy mid-run left the run `RUNNING` forever. Now `pipeline.py` is the single runner: `POST /pipeline/run` starts a background thread and redirects to the new **`/runs`** page; a second click while a run is in progress is refused (lock on fresh heartbeat); `reap_stale_runs()` marks runs with no heartbeat for `RUN_STALE_MINUTES` (45) as FAILED at boot and on every Runs page load. Each run records `stage`, `heartbeat_at`, `triggered_by`, `leads_created`, `contacts_found`, `contacts_zoominfo` and a line-by-line `summary` (columns auto-added by `models._migrate_added_columns`).
+2. **Failures looked like success.** `mod01` returned `[]` on any Claude error, `mod08` never logged SerpAPI 401/429, and an empty `SEARCH_API_KEY` silently used mock data — every one produced a `COMPLETED` run with 0 leads. Now: `mod01` raises `DiscoveryError`, `mod08` raises `SearchError` on 401/403/429 (bad key / quota) and refuses mock data in production, and the run is marked `FAILED` with the exact reason. The morning alert email says **FAILED** in the subject when the last run failed.
+3. **Claude call fragility.** New `modules/llm.py`: one client, model from `CLAUDE_MODEL` env var (default `claude-sonnet-4-6` — change it in Render without a deploy), `timeout=90s`, `max_retries=5`, tolerant JSON extraction (fences/preamble OK), truncation (`stop_reason=max_tokens`) raises instead of parsing half an array; `mod01` budget 4000→8000 tokens. A scoring API error now **skips** the company instead of writing it to `companies` as disqualified forever. `mod07._generate_email` raises instead of returning a `[Email generation failed]` body (which used to become a real Outlook draft).
+4. **Double daily runs.** `scheduler.main()` no longer runs a cycle on every boot/deploy (only if nothing ran in the last 20 h); within a process `/cron/run` cycles are serialised by `CYCLE_LOCK`, and across processes the DB-backed run lock in `pipeline.start_run` refuses a second discovery. Keep ONE daily trigger (the Render Cron Job hitting `/cron/run`); `python scheduler.py --once` forces one cycle by hand.
+5. **Microsoft Graph**: token cached (was one token request per Graph call → AAD throttling), 429/5xx retried with `Retry-After`; a failed Sent-folder listing now raises instead of returning a partial list that flagged real leads `NO_OUTREACH`.
+6. **Config validation**: `config.config_warnings()` logged at boot, shown on `/runs` and in `/health`.
 
 ## Notes
 

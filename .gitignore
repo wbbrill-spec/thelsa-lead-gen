@@ -5,3 +5,4 @@ __pycache__/
 web_credentials.json
 *.egg-info/
 .DS_Store
+.venv/

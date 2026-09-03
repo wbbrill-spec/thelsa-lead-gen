@@ -267,8 +267,31 @@ class DiscoveryRun(Base):
     status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # 'RUNNING', 'COMPLETED', 'FAILED'
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Progress / observability (added 2026-09-02)
+    stage: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)          # current pipeline stage
+    heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    triggered_by: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)   # 'dashboard', 'cron', 'worker', 'manual'
+    leads_created: Mapped[int] = mapped_column(Integer, default=0)
+    contacts_found: Mapped[int] = mapped_column(Integer, default=0)
+    contacts_zoominfo: Mapped[int] = mapped_column(Integer, default=0)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)             # human-readable log of the run
+
+    STATUS_RUNNING = "RUNNING"
+    STATUS_COMPLETED = "COMPLETED"
+    STATUS_FAILED = "FAILED"
+
     # Relationships
     run_by_user: Mapped[Optional["User"]] = relationship("User", back_populates="discovery_runs")
+
+    @property
+    def duration_seconds(self) -> Optional[float]:
+        end = self.completed_at or self.heartbeat_at
+        if self.started_at and end:
+            try:
+                return (end - self.started_at).total_seconds()
+            except TypeError:  # mixed naive/aware (SQLite)
+                return None
+        return None
 
     def __repr__(self) -> str:
         return f"<DiscoveryRun {self.id} [{self.status}] {self.started_at}>"
@@ -284,10 +307,51 @@ def get_engine():
               pool_recycle=280,
     )
 
+# Columns added after the initial schema. ``create_all`` never alters existing
+# tables, so we add them here idempotently (Postgres + SQLite safe).
+_ADDED_COLUMNS = {
+    "discovery_runs": [
+        ("stage", "VARCHAR(40)"),
+        ("heartbeat_at", "TIMESTAMP WITH TIME ZONE"),
+        ("triggered_by", "VARCHAR(40)"),
+        ("leads_created", "INTEGER DEFAULT 0"),
+        ("contacts_found", "INTEGER DEFAULT 0"),
+        ("contacts_zoominfo", "INTEGER DEFAULT 0"),
+        ("summary", "TEXT"),
+    ],
+}
+
+
+def _migrate_added_columns(engine):
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    is_pg = engine.dialect.name == "postgresql"
+    for table, cols in _ADDED_COLUMNS.items():
+        if table not in insp.get_table_names():
+            continue
+        existing = {c["name"] for c in insp.get_columns(table)}
+        for name, ddl in cols:
+            if name in existing:
+                continue
+            print(f"[DB] adding column {table}.{name}")
+            stmt = (f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {ddl}" if is_pg
+                    else f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+            try:
+                # One transaction per column so a race with another booting
+                # process (web + worker deploy together) cannot abort the rest.
+                with engine.begin() as conn:
+                    conn.execute(text(stmt))
+            except Exception as exc:
+                if "already exists" in str(exc).lower() or "duplicate column" in str(exc).lower():
+                    continue
+                raise
+
+
 def create_all_tables():
-    """Create all tables. Safe to call multiple times (no-op if tables exist)."""
+    """Create all tables and add any newer columns. Safe to call repeatedly."""
     engine = get_engine()
     Base.metadata.create_all(engine)
+    _migrate_added_columns(engine)
     return engine
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
@@ -29,6 +30,9 @@ _RUN_HOUR_UTC = 14
 ALERT_TO = ["wbbrill@gmail.com"]
 ALERT_CC = ["bill.brill@inflectionpointnow.com"]
 
+# Prevents two cycles (cron + worker, or a cron retry) from overlapping in one process.
+CYCLE_LOCK = threading.Lock()
+
 
 def _system_user_id(db):
     from models import User
@@ -39,46 +43,15 @@ def _system_user_id(db):
     return u.id if u else None
 
 
-def run_discovery():
-    from db import get_db
-    from models import DiscoveryRun
-
-    with get_db() as db:
-        uid = _system_user_id(db)
-        if not uid:
-            log.error("No user to attribute discovery run; skipping discovery.")
-            return
-        run = DiscoveryRun(run_by_user_id=uid, status="RUNNING")
-        db.add(run)
-        db.flush()
-        run_id = run.id
-
+def run_discovery(triggered_by: str = "scheduler"):
+    """Run one discovery pipeline synchronously via the shared runner.
+    Refuses (and logs) if a run is already in progress."""
+    import pipeline
     try:
-        from modules.mod01_discovery import run_discovery as _discover
-        from modules.mod02_deduplication import deduplicate
-        from modules.mod03_scorer import score_candidates
-        from modules.mod04_segmentation import segment_and_detect_rmc
-        from modules.mod05_enricher import enrich_contacts
-
-        candidates = _discover(run_id=run_id)
-        net_new = deduplicate(candidates, run_id=run_id)
-        qualified = score_candidates(net_new, run_id=run_id)
-        segmented = segment_and_detect_rmc(qualified)
-        enrich_contacts(segmented, run_id=run_id, generated_by_user_id=uid)
-
-        with get_db() as db:
-            r = db.query(DiscoveryRun).filter_by(id=run_id).first()
-            if r:
-                r.completed_at = datetime.now(timezone.utc)
-                r.status = "COMPLETED"
-        log.info("Discovery run %s complete.", run_id)
-    except Exception as e:
-        log.error("Discovery run failed: %s", e, exc_info=True)
-        with get_db() as db:
-            r = db.query(DiscoveryRun).filter_by(id=run_id).first()
-            if r:
-                r.status = "FAILED"
-                r.error_message = str(e)
+        run_id = pipeline.start_run(user_id=None, triggered_by=triggered_by, background=False)
+        log.info("Discovery run %s finished: %s", run_id, pipeline.last_run_status().get("status"))
+    except pipeline.RunAlreadyInProgress as e:
+        log.warning("Skipping discovery: %s", e)
 
 
 def _count_leads():
@@ -111,10 +84,31 @@ def send_morning_alert(new_today, pending):
         log.error("No Gmail token available; skipping morning alert.")
         return
 
-    subject = f"Thelsa Lead Gen — {new_today} new lead(s) to assign"
+    # Be honest about how the run actually went — a failed run must not read
+    # as "ran successfully".
+    import pipeline
+    last = pipeline.last_run_status()
+    if last.get("exists") and last.get("status") == "FAILED":
+        subject = f"⚠️ Thelsa Lead Gen — discovery run #{last['id']} FAILED"
+        run_line = (
+            f"The discovery run FAILED at stage '{last.get('stage')}':\n"
+            f"    {last.get('error_message')}\n\n"
+            "Details: https://thelsa.inflectionpointnow.com/runs\n\n"
+        )
+    elif last.get("exists") and last.get("status") == "RUNNING":
+        subject = f"Thelsa Lead Gen — run #{last['id']} still in progress"
+        run_line = f"The discovery run is still in progress (stage: {last.get('stage')}).\n\n"
+    else:
+        subject = f"Thelsa Lead Gen — {new_today} new lead(s) to assign"
+        run_line = (
+            "The Thelsa lead-gen automation ran successfully.\n"
+            + (f"Run #{last['id']}: {last.get('companies_discovered', 0)} companies found, "
+               f"{last.get('leads_qualified', 0)} qualified, {last.get('leads_created', 0)} new leads.\n\n"
+               if last.get("exists") else "\n")
+        )
     body = (
         "Good morning,\n\n"
-        "The Thelsa lead-gen automation ran successfully.\n\n"
+        + run_line +
         f"New leads discovered in the last 24 hours: {new_today}\n"
         f"Total leads waiting to be assigned: {pending}\n\n"
         "Review and assign them here: https://thelsa.inflectionpointnow.com\n\n"
@@ -145,10 +139,10 @@ def _sleep_until_next_run():
     time.sleep(secs)
 
 
-def run_cycle():
+def run_cycle(triggered_by: str = "scheduler"):
     log.info("Running discovery...")
     try:
-        run_discovery()
+        run_discovery(triggered_by=triggered_by)
     except Exception as e:
         log.error("Discovery step failed: %s", e, exc_info=True)
 
@@ -169,15 +163,43 @@ def run_cycle():
         log.error("Alert step failed: %s", e, exc_info=True)
 
 
+def _already_ran_today() -> bool:
+    from db import get_db
+    from models import DiscoveryRun
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=20)
+    with get_db() as db:
+        return db.query(DiscoveryRun).filter(DiscoveryRun.started_at >= cutoff).count() > 0
+
+
 def main():
+    """Worker loop. Runs once a day at _RUN_HOUR_UTC.
+
+    On boot it does NOT run immediately (every deploy used to trigger a full
+    discovery + a duplicate morning email); it only runs on boot if nothing has
+    run in the last 20 hours. Use ``python scheduler.py --once`` to force one cycle.
+    """
+    import sys
     log.info("TMS Lead Gen Scheduler starting.")
     from models import create_all_tables
+    import config
     create_all_tables()
+    config.log_config_warnings("SCHEDULER")
     log.info("Database tables verified.")
 
+    if "--once" in sys.argv:
+        with CYCLE_LOCK:
+            run_cycle(triggered_by="manual")
+        return
+
+    if not _already_ran_today():
+        log.info("No run in the last 20h — running a cycle now.")
+        with CYCLE_LOCK:
+            run_cycle(triggered_by="worker")
+
     while True:
-        run_cycle()
         _sleep_until_next_run()
+        with CYCLE_LOCK:
+            run_cycle(triggered_by="worker")
 
 
 if __name__ == "__main__":

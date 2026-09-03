@@ -23,6 +23,10 @@ services:
         sync: false
       - key: TOKEN_ENCRYPTION_KEY
         sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tms-leadgen-db
+          property: connectionString
       - key: PYTHONUNBUFFERED
         value: "1"
 
@@ -34,6 +38,14 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python scheduler.py
     envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SEARCH_API_KEY
+        sync: false
+      - key: ZOOMINFO_CLIENT_ID
+        sync: false
+      - key: ZOOMINFO_CLIENT_SECRET
+        sync: false
       - key: FLASK_SECRET_KEY
         fromService:
           name: tms-leadgen
