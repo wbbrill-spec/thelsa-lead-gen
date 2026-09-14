@@ -49,6 +49,22 @@ def get_client():
     return _client
 
 
+_TEMP_SUPPORT = {"checked": False, "ok": False}
+
+
+def _supports_temperature() -> bool:
+    if not _TEMP_SUPPORT["checked"]:
+        try:
+            import inspect
+            import anthropic
+            _TEMP_SUPPORT["ok"] = "temperature" in inspect.signature(
+                anthropic.resources.messages.Messages.create).parameters
+        except Exception:
+            _TEMP_SUPPORT["ok"] = False
+        _TEMP_SUPPORT["checked"] = True
+    return _TEMP_SUPPORT["ok"]
+
+
 def ask_text(prompt: str, max_tokens: int, temperature: float | None = None,
              system: str | None = None, tag: str = "LLM") -> tuple[str, str]:
     """Send a single-turn prompt. Returns (text, stop_reason). Raises LLMError."""
@@ -59,7 +75,11 @@ def ask_text(prompt: str, max_tokens: int, temperature: float | None = None,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
-    if temperature is not None:
+    # NOTE: anthropic SDK >= 1.x removed the top-level ``temperature`` kwarg
+    # (run #100 on 2026-09-09 failed with "unexpected keyword argument
+    # 'temperature'"). The parameter is kept for call-site compatibility but
+    # only forwarded when the installed SDK actually accepts it.
+    if temperature is not None and _supports_temperature():
         kwargs["temperature"] = temperature
     if system:
         kwargs["system"] = system
