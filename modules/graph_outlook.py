@@ -125,3 +125,80 @@ def create_outlook_draft(mailbox: str, to_email: str, subject: str, body: str) -
         raise RuntimeError(f"Graph create_draft failed [{r.status_code}]: {r.text[:400]}")
     d = r.json()
     return {"id": d.get("id", ""), "webLink": d.get("webLink", "")}
+
+
+# ── Follow-ups: reply in the original thread ──────────────────────────────────
+
+def create_reply_draft(mailbox: str, message_id: str, body: str,
+                       bcc: list[str] | None = None, subject: str | None = None) -> dict:
+    """Create a reply DRAFT to ``message_id`` in ``mailbox`` (threaded: same
+    conversation, "Re:" subject, original quoted below). Returns {'id','webLink'}."""
+    mailbox = (mailbox or "").strip()
+    if mailbox.lower() not in ALLOWED_MAILBOXES:
+        raise ValueError(f"mailbox not allowed: {mailbox}")
+    r = graph_request("POST", f"{GRAPH}/users/{mailbox}/messages/{message_id}/createReply",
+                      headers={"Content-Type": "application/json"}, json={}, timeout=30)
+    if r.status_code >= 300:
+        raise RuntimeError(f"Graph createReply failed [{r.status_code}]: {r.text[:400]}")
+    draft = r.json()
+    draft_id = draft.get("id", "")
+    # Prepend our text to the quoted original (keep Graph's quoted thread below).
+    quoted = (draft.get("body") or {}).get("content") or ""
+    ctype = ((draft.get("body") or {}).get("contentType") or "HTML")
+    if ctype.lower() == "html":
+        new_body = _text_to_html(body) + quoted
+    else:
+        new_body = body + "\n\n" + quoted
+    patch: dict = {"body": {"contentType": ctype, "content": new_body}}
+    if subject:
+        patch["subject"] = subject
+    if bcc:
+        patch["bccRecipients"] = [{"emailAddress": {"address": a}} for a in bcc if a]
+    r = graph_request("PATCH", f"{GRAPH}/users/{mailbox}/messages/{draft_id}",
+                      headers={"Content-Type": "application/json"}, json=patch, timeout=30)
+    if r.status_code >= 300:
+        raise RuntimeError(f"Graph patch reply failed [{r.status_code}]: {r.text[:400]}")
+    d = r.json()
+    return {"id": d.get("id", draft_id), "webLink": d.get("webLink", ""),
+            "subject": d.get("subject", ""), "conversationId": d.get("conversationId", "")}
+
+
+def send_draft(mailbox: str, draft_id: str) -> None:
+    """Send an existing draft. Requires application permission Mail.Send."""
+    r = graph_request("POST", f"{GRAPH}/users/{mailbox}/messages/{draft_id}/send", timeout=30)
+    if r.status_code == 403:
+        raise PermissionError(
+            "Microsoft Graph refused to send (403). The Azure app needs the application "
+            "permission Mail.Send with admin consent — ask IT, or set FOLLOWUP_MODE=draft."
+        )
+    if r.status_code >= 300:
+        raise RuntimeError(f"Graph send failed [{r.status_code}]: {r.text[:400]}")
+
+
+def send_new_mail(mailbox: str, to_email: str, subject: str, body: str,
+                  bcc: list[str] | None = None) -> None:
+    """Send a brand-new message (used when there is no original to reply to)."""
+    mailbox = (mailbox or "").strip()
+    if mailbox.lower() not in ALLOWED_MAILBOXES:
+        raise ValueError(f"mailbox not allowed: {mailbox}")
+    msg = {"subject": subject, "body": {"contentType": "Text", "content": body},
+           "toRecipients": [{"emailAddress": {"address": to_email}}]}
+    if bcc:
+        msg["bccRecipients"] = [{"emailAddress": {"address": a}} for a in bcc if a]
+    r = graph_request("POST", f"{GRAPH}/users/{mailbox}/sendMail",
+                      headers={"Content-Type": "application/json"},
+                      json={"message": msg, "saveToSentItems": True}, timeout=30)
+    if r.status_code == 403:
+        raise PermissionError("Microsoft Graph refused to send (403) — Mail.Send permission missing.")
+    if r.status_code >= 300:
+        raise RuntimeError(f"Graph sendMail failed [{r.status_code}]: {r.text[:400]}")
+
+
+def _text_to_html(text: str) -> str:
+    import html
+    paras = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
+    return "".join(
+        "<p style=\"font-family:Calibri,Arial,sans-serif;font-size:11pt;margin:0 0 12px 0\">"
+        + html.escape(p).replace("\n", "<br>") + "</p>"
+        for p in paras
+    ) + "<br>"

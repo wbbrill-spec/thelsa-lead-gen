@@ -114,116 +114,112 @@ Requisitos:
 Responde ÚNICAMENTE con un objeto JSON:
 {{"subject": "...", "body": "..."}}"""
 
-_D2_EN = """Write a brief, warm follow-up email in English. This is Day 2 follow-up after an initial outreach to {contact_name} at {company_name} about Thelsa's cross-border relocation services.
+_WHY_THELSA_EN = """Why Thelsa is the right partner (weave ONE or TWO of these in naturally — do not list them all):
+- Mexico's largest and most established relocation company, 30+ years, offices across Mexico and a US cross-border team
+- One accountable partner for BOTH commercial moves (offices, plants, equipment, employee transfers) AND residential relocations of the people who move with the business
+- Bilingual coordinators on both sides of the border, customs and immigration support, destination and settling-in services
+- Trusted by multinationals and relocation management companies for Mexico–US moves"""
+
+_WHY_THELSA_ES = """Por qué Thelsa es el socio indicado (integra UNA o DOS de estas ideas de forma natural — no las enlistes todas):
+- La empresa de mudanzas y reubicación más grande y consolidada de México, con más de 30 años y presencia en todo el país y en la frontera con EE. UU.
+- Un solo socio responsable tanto de mudanzas comerciales (oficinas, plantas, equipo, traslados de personal) como de las reubicaciones residenciales de las personas que se mueven con la empresa
+- Coordinadores bilingües a ambos lados de la frontera, apoyo aduanal y migratorio, servicios de destino e integración
+- Socio de confianza de multinacionales y empresas de gestión de reubicación para mudanzas México–EE. UU."""
+
+_D2_EN = """Write a short, warm follow-up email in English from {sender_name} at Thelsa to {contact_name} at {company_name}.
+It is a reply in the same thread as the original outreach (subject "{original_subject}"), sent two working days later. No reply has come yet.
+
+{why_thelsa}
 
 Requirements:
-- 2-3 sentences maximum
-- Gentle bump — assume the email got buried
-- Reference the original email briefly
-- Same CTA: {cta}
-- Greet the recipient by name using the provided contact name; never use a placeholder like "[Name]"
-- Do NOT use subject line in body
+- 80–120 words, 2 short paragraphs
+- Friendly and human but professional — a colleague circling back, never pushy or salesy
+- Open by referencing the earlier note (e.g. "I wanted to follow up on my note about…") and their expansion: {expansion_detail}
+- Include one concrete reason Thelsa is a great partner for their commercial AND residential relocation needs
+- Ask for 15 minutes of their time, offering to work around their schedule
+- Greet by first name ("Hi {contact_first_name},"); never use a placeholder like "[Name]"
+- Sign off with just the first name of the sender: {sender_first_name}
+- Do NOT include the subject line in the body
 
 Return ONLY a JSON object:
 {{"subject": "Re: {original_subject}", "body": "..."}}"""
 
-_D2_ES = """Escribe un breve correo de seguimiento en español. Es el seguimiento del Día 2 después de una presentación inicial a {contact_name} en {company_name} sobre los servicios transfronterizos de Thelsa.
+_D2_ES = """Escribe un breve y cordial correo de seguimiento en español de {sender_name}, de Thelsa, para {contact_name} en {company_name}.
+Es una respuesta en el mismo hilo del correo original (asunto "{original_subject}"), enviada dos días hábiles después. Aún no hay respuesta.
+
+{why_thelsa}
 
 Requisitos:
-- Máximo 2-3 oraciones
-- Tono amable, no invasivo — asumir que el correo anterior se perdió entre otros
-- Saludo formal mexicano breve
-- Referencia brevemente el correo anterior
-- Mismo CTA: {cta}
-- Cierre breve pero formal
-- Nunca uses un marcador como "[Name]" ni "[Nombre]"; usa el nombre proporcionado
-- NO incluyas el asunto en el cuerpo del correo
+- 80–120 palabras, 2 párrafos cortos
+- Tono cálido y humano pero profesional, estilo empresarial mexicano — alguien que retoma la conversación, nunca insistente ni de "venta dura"
+- Abre haciendo referencia al correo anterior (p. ej. "Quería dar seguimiento a mi mensaje sobre…") y a su expansión: {expansion_detail}
+- Incluye una razón concreta por la que Thelsa es un gran socio para sus necesidades de reubicación comercial Y residencial
+- Pide 15 minutos de su tiempo, ofreciendo adaptarte a su agenda
+- Saluda por nombre ("Hola {contact_first_name}," o "Estimado/a {contact_first_name},"); nunca uses "[Nombre]"
+- Firma solo con el nombre de quien envía: {sender_first_name}
+- NO incluyas el asunto en el cuerpo
 
 Responde ÚNICAMENTE con un objeto JSON:
 {{"subject": "Re: {original_subject}", "body": "..."}}"""
 
-_D5_SMB_EN = """Write an urgent, value-forward follow-up email in English to {contact_name} at {company_name}.
+_D5_SMB_EN = """Write a warm, confident final follow-up email in English from {sender_name} at Thelsa to {contact_name} at {company_name}.
+It is a reply in the same thread as the original outreach (subject "{original_subject}"), about a week after the first note and after one earlier follow-up. No reply has come.
 
-This is the Day 5 follow-up. No response has been received.
-
-Key Thelsa credentials to include:
-- Largest, most well-established company in Mexico
-- 30+ years in business
-- Full services: household goods, personal effects, micro shipments, office and commercial moving, destination/settling-in services, immigration
-- Core message: "Your employees deserve the best — we need to talk"
+{why_thelsa}
 
 Requirements:
-- Professional but urgent tone
-- Confident, not desperate
-- Clear final CTA: 15-minute call
-- Greet the recipient by name using the provided contact name; never use a placeholder like "[Name]"
-- Do NOT use subject line in body
+- 100–140 words, 2–3 short paragraphs
+- Friendly and respectful of their time — acknowledge they are busy with the expansion ({expansion_detail}); never guilt-trip
+- Briefly reference the earlier emails
+- Give one or two specific reasons Thelsa is a great partner for both the commercial move and the residential relocations of the people coming with it
+- Ask once more for a 15-minute call, and make it easy: offer two time windows or to simply reply with a convenient day
+- Close the loop gracefully: if now isn't the right time, you're happy to reconnect when it is
+- Greet by first name ("Hi {contact_first_name},"); never use a placeholder like "[Name]"
+- Sign off with just the sender's first name: {sender_first_name}
+- Do NOT include the subject line in the body
 
 Return ONLY a JSON object:
-{{"subject": "...", "body": "..."}}"""
+{{"subject": "Re: {original_subject}", "body": "..."}}"""
 
-_D5_RMC_EN = """Write an urgent, value-forward follow-up email in English to {contact_name}, {contact_title} at {rmc_name}.
+_D5_RMC_EN = """Write a warm, confident final follow-up email in English from {sender_name} at Thelsa to {contact_name}, {contact_title} at {rmc_name} (a relocation management company).
+It is a reply in the same thread as the original outreach (subject "{original_subject}"), about a week after the first note and after one earlier follow-up. No reply has come.
 
-This is the Day 5 follow-up. No response has been received.
-
-Key Thelsa credentials to include:
-- Largest, most well-established company in Mexico
-- 30+ years in business
-- Full services: household goods, personal effects, micro shipments, office and commercial moving, destination/settling-in services, immigration
-- Core message: "Your clients deserve the best — we need to talk"
+{why_thelsa}
 
 Requirements:
-- Professional but urgent tone
-- B2B partner framing
-- Confident, not desperate
-- Clear final CTA: 20-minute call
-- Greet the recipient by name using the provided contact name; never use a placeholder like "[Name]"
-- Do NOT use subject line in body
+- 100–140 words, 2–3 short paragraphs, partner-to-partner tone
+- Friendly and respectful of their time; never pushy
+- Briefly reference the earlier emails and the Mexico–US move activity of their client {company_name}
+- Give one or two specific reasons Thelsa is the right destination/origin partner for both commercial moves and residential relocations in Mexico
+- Ask once more for a 15-minute call and make it easy (offer two time windows or "just reply with a day that works")
+- Close gracefully: happy to reconnect later if the timing is wrong
+- Greet by first name ("Hi {contact_first_name},"); never use a placeholder like "[Name]"
+- Sign off with just the sender's first name: {sender_first_name}
+- Do NOT include the subject line in the body
 
 Return ONLY a JSON object:
-{{"subject": "...", "body": "..."}}"""
+{{"subject": "Re: {original_subject}", "body": "..."}}"""
 
-_D5_SMB_ES = """Escribe un correo de seguimiento urgente y con propuesta de valor en español para {contact_name} en {company_name}.
+_D5_SMB_ES = """Escribe un correo de seguimiento final, cálido y seguro, en español de {sender_name}, de Thelsa, para {contact_name} en {company_name}.
+Es una respuesta en el mismo hilo del correo original (asunto "{original_subject}"), aproximadamente una semana después del primer mensaje y tras un seguimiento previo. No ha habido respuesta.
 
-Este es el seguimiento del Día 5. No se ha recibido respuesta.
-
-Credenciales clave de Thelsa a incluir:
-- La empresa de mudanzas más grande y consolidada de México
-- Más de 30 años en el negocio
-- Servicios completos: enseres domésticos, efectos personales, micro envíos, mudanza de oficinas y comercial, servicios de destino e integración, inmigración
-- Mensaje central: "Sus empleados merecen lo mejor — necesitamos hablar"
+{why_thelsa}
 
 Requisitos:
-- Tono profesional pero urgente, con confianza — no desesperado
-- Saludo formal mexicano
-- CTA claro: llamada de 15 minutos
-- Cierre formal apropiado
-- Nunca uses un marcador como "[Name]" ni "[Nombre]"; usa el nombre proporcionado
-- NO incluyas el asunto en el cuerpo del correo
+- 100–140 palabras, 2–3 párrafos cortos
+- Tono cordial, profesional y respetuoso de su tiempo — reconoce que están ocupados con la expansión ({expansion_detail}); nunca reproches
+- Haz referencia breve a los correos anteriores
+- Da una o dos razones concretas por las que Thelsa es un gran socio tanto para la mudanza comercial como para las reubicaciones residenciales del personal que llega con ella
+- Pide una vez más una llamada de 15 minutos y facilítalo: ofrece dos horarios o que simplemente responda con un día que le convenga
+- Cierra con elegancia: si no es el momento, con gusto retomas la conversación más adelante
+- Saluda por nombre ("Hola {contact_first_name}," o "Estimado/a {contact_first_name},"); nunca uses "[Nombre]"
+- Firma solo con el nombre de quien envía: {sender_first_name}
+- NO incluyas el asunto en el cuerpo
 
 Responde ÚNICAMENTE con un objeto JSON:
-{{"subject": "...", "body": "..."}}"""
+{{"subject": "Re: {original_subject}", "body": "..."}}"""
 
-_D5_RMC_ES = """Escribe un correo de seguimiento urgente y con propuesta de valor en español para {contact_name}, {contact_title} en {rmc_name}.
-
-Este es el seguimiento del Día 5. No se ha recibido respuesta.
-
-Credenciales clave de Thelsa a incluir:
-- La empresa de mudanzas más grande y consolidada de México
-- Más de 30 años en el negocio
-- Servicios completos: enseres domésticos, efectos personales, micro envíos, mudanza de oficinas y comercial, servicios de destino e integración, inmigración
-- Mensaje central: "Sus clientes merecen lo mejor — necesitamos hablar"
-
-Requisitos:
-- Tono profesional pero urgente, B2B
-- Saludo formal mexicano
-- CTA claro: llamada de 20 minutos
-- Cierre formal apropiado
-- Nunca uses un marcador como "[Name]" ni "[Nombre]"; usa el nombre proporcionado
-- NO incluyas el asunto en el cuerpo del correo
-
-Responde ÚNICAMENTE con un objeto JSON:
-{{"subject": "...", "body": "..."}}"""
+_D5_RMC_ES = _D5_SMB_ES
 
 # ── Main functions ─────────────────────────────────────────────────────────────
 
@@ -396,12 +392,21 @@ def _build_context(lead, company, contact) -> dict:
     contact_title = contact.title if contact else ""
     contact_type = contact.contact_type if contact else "DIRECT"
 
-    # Get original subject from initial draft if available
+    # Original subject + language of the initial outreach (prefer the Outlook draft)
     original_subject = ""
+    initial_language = (getattr(lead, "sent_language", None) or "").upper() or None
     if lead.email_drafts:
-        initial = next((d for d in lead.email_drafts if d.draft_type == "INITIAL" and d.language == "EN"), None)
+        initials = [d for d in lead.email_drafts if d.draft_type == "INITIAL"]
+        initial = (next((d for d in initials if d.provider == "outlook"), None)
+                   or next((d for d in initials if d.language == (initial_language or "EN")), None)
+                   or (initials[0] if initials else None))
         if initial:
             original_subject = initial.subject_line or ""
+            initial_language = initial_language or (initial.language or "EN").upper()
+
+    sender = getattr(lead, "assigned_to", None)
+    sender_name = (sender.full_name if sender and sender.full_name else "the Thelsa team").strip()
+    sender_first_name = sender_name.split()[0] if sender_name else "Thelsa"
 
     expansion_detail = company.source_snippet[:200] if company else ""
 
@@ -415,6 +420,9 @@ def _build_context(lead, company, contact) -> dict:
         "expansion_detail": expansion_detail,
         "effective_flow": "RMC" if (company and company.rmc_detected) else "SMB",
         "original_subject": original_subject,
+        "initial_language": initial_language or "EN",
+        "sender_name": sender_name,
+        "sender_first_name": sender_first_name,
         "cta_en": "15-minute call" if contact_type == "DIRECT" else "20-minute call",
         "cta_es": "llamada de 15 minutos" if contact_type == "DIRECT" else "llamada de 20 minutos",
     }
@@ -450,6 +458,9 @@ def _generate_email(ctx: dict, draft_type: str, lang: str) -> tuple[str, str]:
         services=_THELSA_SERVICES_ES if lang == "ES" else _THELSA_SERVICES_EN,
         original_subject=ctx["original_subject"],
         cta=ctx["cta_es"] if lang == "ES" else ctx["cta_en"],
+        why_thelsa=_WHY_THELSA_ES if lang == "ES" else _WHY_THELSA_EN,
+        sender_name=ctx.get("sender_name", "the Thelsa team"),
+        sender_first_name=ctx.get("sender_first_name", "Thelsa"),
     )
 
     from modules.llm import ask_json, LLMError

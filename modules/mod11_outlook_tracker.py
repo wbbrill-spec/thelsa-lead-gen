@@ -1,6 +1,8 @@
 """MOD-11: Outlook tracking — sent detection, reply detection, and working-day
 Day-2 / Day-5 follow-ups, all via the app-only Microsoft Graph credentials
-(same Azure app as graph_outlook). Drafts only — never sends.
+(same Azure app as graph_outlook). Follow-ups are sent automatically (reply in
+the original thread, BCC the rep) when FOLLOWUP_MODE=send and the app holds
+Mail.Send; otherwise they are left as threaded reply drafts.
 
 Called by the scheduler/cron. Uses the existing Lead status machine:
 APPROVED / DRAFTED --(sent detected)--> DRAFTED (initial_sent_at set)
@@ -63,6 +65,14 @@ def _domain_of(value: str) -> str:
     return s
 
 
+_ES_HINTS = ("mudanza", "reubicación", "reubicacion", "expansión", "expansion en", "servicios", "transfronteriz", "méxico", "mexico y", "sus ", "su ")
+
+
+def _guess_language(subject: str) -> str:
+    s = (subject or "").lower()
+    return "ES" if any(h in s for h in _ES_HINTS) else "EN"
+
+
 def _add_working_days(dt: datetime, n: int) -> datetime:
     """Add n working days (Mon-Fri), skipping weekends."""
     d = dt
@@ -77,7 +87,7 @@ def _add_working_days(dt: datetime, n: int) -> datetime:
 def _list_folder(mailbox: str, folder: str, date_field: str, since_iso: str) -> list:
     url = (
         f"{GRAPH}/users/{mailbox}/mailFolders/{folder}/messages"
-        f"?$select=subject,toRecipients,from,{date_field},conversationId"
+        f"?$select=id,subject,toRecipients,from,{date_field},conversationId"
         f"&$top=200&$filter={date_field} ge {since_iso}"
     )
     items: list = []
@@ -151,10 +161,10 @@ def run_outlook_tracking() -> dict:
                      .first())
                 to_addr = (lead.contact.email or "").strip().lower() if (lead.contact and lead.contact.email) else ""
                 if mb and d and d.subject_line:
-                    direct_rows.append((lead.id, mb, d.subject_line.strip().lower(), to_addr))
+                    direct_rows.append((lead.id, mb, d.subject_line.strip().lower(), to_addr, (d.language or "EN").upper()))
 
     # 1a) DIRECT — match the initial draft's subject OR recipient in the rep's Sent folder
-    for lead_id, mb, subj, to_addr in direct_rows:
+    for lead_id, mb, subj, to_addr, lang in direct_rows:
         try:
             def _matches(m, subj=subj, to_addr=to_addr):
                 if (m.get("subject") or "").strip().lower() == subj:
@@ -176,6 +186,8 @@ def run_outlook_tracking() -> dict:
                 lead.sent_to_email = to.get("address")
                 lead.sent_to_name = to.get("name")
                 lead.sent_conversation_id = match.get("conversationId")
+                lead.sent_message_id = match.get("id")
+                lead.sent_language = lang
                 lead.followup_d2_scheduled = _add_working_days(sent_dt, 2)
                 lead.followup_d5_scheduled = _add_working_days(sent_dt, 5)
                 transition_status(db, lead, Lead.STATUS_DRAFTED, "system",
@@ -224,6 +236,8 @@ def run_outlook_tracking() -> dict:
                 lead.sent_to_email = ea.get("address")
                 lead.sent_to_name = ea.get("name")
                 lead.sent_conversation_id = m.get("conversationId")
+                lead.sent_message_id = m.get("id")
+                lead.sent_language = _guess_language(m.get("subject") or "")
                 lead.assigned_to_user_id = uid  # reassign to the rep who actually emailed the prospect
                 lead.followup_d2_scheduled = _add_working_days(sent_dt, 2)
                 lead.followup_d5_scheduled = _add_working_days(sent_dt, 5)
@@ -306,8 +320,12 @@ def _run_followups(now: datetime, draft_type: str) -> int:
             with get_db() as db:
                 lead = db.query(Lead).filter_by(id=lead_id).first()
                 setattr(lead, "followup_d2_sent_at" if draft_type == "FOLLOWUP_D2" else "followup_d5_sent_at", now)
-                reason = (f"{draft_type} draft created in Outlook" if created
-                          else f"{draft_type} already drafted — skipped duplicate")
+                if created == "sent":
+                    reason = f"{draft_type} follow-up SENT from {mb} (reply in thread, BCC rep)"
+                elif created:
+                    reason = f"{draft_type} reply draft created in {mb}'s Outlook"
+                else:
+                    reason = f"{draft_type} already handled — skipped duplicate"
                 transition_status(db, lead, to_status, "system", reason)
             if created:
                 count += 1
@@ -316,26 +334,63 @@ def _run_followups(now: datetime, draft_type: str) -> int:
     return count
 
 
-def _create_followup_outlook(lead_id: int, mailbox: str, draft_type: str) -> bool:
-    """Create a follow-up draft in Outlook — but only if one of this type does not
-    already exist for the lead. Idempotent: prevents duplicate follow-up drafts
-    even across overlapping runs. Returns True if a new draft was created, False
-    if an existing draft made it a no-op.
+def _create_followup_outlook(lead_id: int, mailbox: str, draft_type: str):
+    """Generate the Day-2 / Day-5 follow-up in the language of the initial
+    outreach and deliver it as a reply in the original thread from the assigned
+    rep's mailbox, BCC the rep.
+
+    config.FOLLOWUP_MODE == "send"  → sent automatically (needs Graph Mail.Send)
+    config.FOLLOWUP_MODE == "draft" → left as a threaded reply draft
+
+    Idempotent: no-op if a follow-up of this type already exists for the lead.
+    Returns "sent", "draft", or False (duplicate).
     """
+    import config
     from modules.mod07_drafter import _build_context, _generate_email, _save_draft
-    from modules.graph_outlook import create_outlook_draft
+    from modules.graph_outlook import create_reply_draft, send_draft, create_outlook_draft, send_new_mail
 
     with get_db() as db:
         existing = (db.query(EmailDraft)
                     .filter_by(lead_id=lead_id, draft_type=draft_type, provider="outlook")
                     .first())
         if existing:
-            print(f"[MOD-11] {draft_type} already drafted for lead {lead_id}; skipping duplicate.")
+            print(f"[MOD-11] {draft_type} already handled for lead {lead_id}; skipping duplicate.")
             return False
         lead = db.query(Lead).filter_by(id=lead_id).first()
         ctx = _build_context(lead, lead.company, lead.contact)
         to_email = lead.sent_to_email or (lead.contact.email if lead.contact else "")
-        subject, body = _generate_email(ctx, draft_type, "EN")
-        res = create_outlook_draft(mailbox=mailbox, to_email=to_email, subject=subject, body=body)
-        _save_draft(lead_id, draft_type, "EN", subject, body, res.get("id", ""), "outlook")
-    return True
+        anchor_id = lead.sent_message_id
+        lang = ctx.get("initial_language") or "EN"
+
+    # Generate OUTSIDE the DB session (slow API calls must not hold a connection)
+    subject, body = _generate_email(ctx, draft_type, lang)
+    bcc = [mailbox] if config.FOLLOWUP_BCC_REP else []
+    mode = config.FOLLOWUP_MODE
+
+    if anchor_id:
+        res = create_reply_draft(mailbox=mailbox, message_id=anchor_id, body=body, bcc=bcc)
+        draft_id = res.get("id", "")
+        delivered = "draft"
+        if mode == "send":
+            try:
+                send_draft(mailbox, draft_id)
+                delivered = "sent"
+            except PermissionError as e:
+                print(f"[MOD-11] {e} — leaving {draft_type} for lead {lead_id} as a draft.")
+    else:
+        # No sent-message anchor (very old lead) — fall back to a standalone email
+        if mode == "send":
+            try:
+                send_new_mail(mailbox, to_email, subject, body, bcc=bcc)
+                draft_id, delivered = "", "sent"
+            except PermissionError as e:
+                print(f"[MOD-11] {e} — creating {draft_type} draft instead.")
+                res = create_outlook_draft(mailbox=mailbox, to_email=to_email, subject=subject, body=body)
+                draft_id, delivered = res.get("id", ""), "draft"
+        else:
+            res = create_outlook_draft(mailbox=mailbox, to_email=to_email, subject=subject, body=body)
+            draft_id, delivered = res.get("id", ""), "draft"
+
+    _save_draft(lead_id, draft_type, lang, subject, body, draft_id, "outlook")
+    print(f"[MOD-11] {draft_type} ({lang}) for lead {lead_id}: {delivered} via {mailbox}")
+    return delivered
