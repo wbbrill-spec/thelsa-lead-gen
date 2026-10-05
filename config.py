@@ -42,6 +42,15 @@ RUN_STALE_MINUTES = int(os.environ.get("RUN_STALE_MINUTES", "45"))
 # (a run uses ~8 discovery searches + 1 per contact fallback + 1 per large corp).
 SEARCH_MIN_LEFT = int(os.environ.get("SEARCH_MIN_LEFT", "15"))
 
+# ── Follow-ups ─────────────────────────────────────────────────────────────────
+# "send"  → Day-2 / Day-5 follow-ups are SENT automatically from the assigned
+#           rep's mailbox as a reply in the original thread, BCC to the rep.
+#           Requires the Azure app to hold application permission Mail.Send.
+# "draft" → same email is created as a threaded reply DRAFT in the rep's
+#           Drafts folder (the behaviour until Mail.Send is granted).
+FOLLOWUP_MODE = os.environ.get("FOLLOWUP_MODE", "draft").strip().lower()
+FOLLOWUP_BCC_REP = os.environ.get("FOLLOWUP_BCC_REP", "1").strip() not in ("0", "false", "no")
+
 # ── Web Search ─────────────────────────────────────────────────────────────────
 SEARCH_API_KEY = os.environ.get("SEARCH_API_KEY", "")
 SEARCH_PROVIDER = os.environ.get("SEARCH_PROVIDER", "serpapi")  # serpapi or perplexity

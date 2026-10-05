@@ -181,6 +181,8 @@ class Lead(Base):
     sent_to_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     sent_to_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     sent_conversation_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sent_message_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)        # Graph id of the rep's sent initial email (reply-in-thread anchor)
+    sent_language: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)     # 'EN' / 'ES' — language of the initial outreach
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
@@ -310,6 +312,10 @@ def get_engine():
 # Columns added after the initial schema. ``create_all`` never alters existing
 # tables, so we add them here idempotently (Postgres + SQLite safe).
 _ADDED_COLUMNS = {
+    "leads": [
+        ("sent_message_id", "TEXT"),
+        ("sent_language", "VARCHAR(5)"),
+    ],
     "discovery_runs": [
         ("stage", "VARCHAR(40)"),
         ("heartbeat_at", "TIMESTAMP WITH TIME ZONE"),
