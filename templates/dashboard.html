@@ -6,7 +6,7 @@
 <!-- Header -->
 <div class="flex-between" style="margin-bottom: 24px;">
   <div>
-    <h1 style="font-size: 20px; font-weight: 700;">
+    <h1>
       {% if view == 'pending' %}Pending Action{% else %}All Leads{% endif %}
     </h1>
     <div class="text-muted text-small mt-8">
@@ -39,20 +39,19 @@
 
 <!-- Stats row (pending view only) -->
 {% if view == 'pending' %}
-<div class="flex gap-16" style="margin-bottom: 24px;">
-  <div class="card" style="flex:1; padding: 16px; text-align: center;">
-    <div style="font-size: 24px; font-weight: 700;">{{ total_leads }}</div>
-    <div class="text-muted text-small">Total Leads</div>
-  </div>
-  <div class="card" style="flex:1; padding: 16px; text-align: center;">
-    <div style="font-size: 24px; font-weight: 700; color: var(--green);">{{ responded }}</div>
-    <div class="text-muted text-small">Responded</div>
-  </div>
-  <div class="card" style="flex:1; padding: 16px; text-align: center;">
-    <div style="font-size: 24px; font-weight: 700; color: var(--orange);">{{ call_required }}</div>
-    <div class="text-muted text-small">Call Required</div>
-  </div>
+<div class="kpis">
+  <div class="kpi"><div class="v">{{ total_leads }}</div><div class="l">Total leads</div></div>
+  <div class="kpi green"><div class="v">{{ responded }}</div><div class="l">Responded</div></div>
+  <div class="kpi amber"><div class="v">{{ call_required }}</div><div class="l">Call required</div></div>
+  <div class="kpi"><div class="v">{{ leads|length }}</div><div class="l">Pending action</div></div>
 </div>
+<style>
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .kpi { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .kpi .v { font-size: 28px; font-weight: 800; line-height: 1.1; }
+  .kpi .l { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #777; margin-top: 4px; }
+  .kpi.green .v { color: var(--green); } .kpi.amber .v { color: var(--yellow); } .kpi.red .v { color: var(--red); }
+</style>
 {% endif %}
 
 <!-- Filters (all view only) -->

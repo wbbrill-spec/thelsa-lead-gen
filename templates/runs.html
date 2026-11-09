@@ -5,17 +5,17 @@
 <style>
   .run-row td { vertical-align: top; }
   .status-pill { display:inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
-  .status-RUNNING { background: #0c2340; color: #60a5fa; border: 1px solid #1e3a5f; }
-  .status-COMPLETED { background: var(--green-bg); color: var(--green); border: 1px solid #166534; }
-  .status-FAILED { background: var(--red-bg); color: var(--red); border: 1px solid #7f1d1d; }
+  .status-RUNNING { background: var(--blue-bg); color: var(--blue); border: 1px solid #c6dafc; }
+  .status-COMPLETED { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-br); }
+  .status-FAILED { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-br); }
   .status-unknown { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
   .summary { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--text-dim); background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-top: 6px; max-height: 220px; overflow: auto; }
   .err { color: var(--red); font-size: 12.5px; margin-top: 4px; white-space: pre-wrap; }
   details > summary { cursor: pointer; color: var(--accent); font-size: 12px; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .spinner { display:inline-block; width: 10px; height: 10px; border: 2px solid #60a5fa; border-top-color: transparent; border-radius: 50%; animation: spin 0.9s linear infinite; vertical-align: -1px; margin-right: 6px; }
+  .spinner { display:inline-block; width: 10px; height: 10px; border: 2px solid var(--blue); border-top-color: transparent; border-radius: 50%; animation: spin 0.9s linear infinite; vertical-align: -1px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .warn-box { background: var(--yellow-bg); color: var(--yellow); border: 1px solid #78350f; border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 16px; }
+  .warn-box { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-br); border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 16px; }
   .warn-box ul { margin: 6px 0 0 18px; }
 </style>
 {% endblock %}
