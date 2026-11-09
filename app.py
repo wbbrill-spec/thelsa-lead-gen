@@ -545,6 +545,43 @@ def rebalance():
     return jsonify(result)
 
 
+@app.route("/admin/purge-no-contact", methods=["GET", "POST"])
+def purge_no_contact():
+    """Remove leads discovered BEFORE the ZoomInfo fix (2026-09-03) that never got a
+    named contact and never progressed (no reply / call / close). Their companies
+    are kept so dedup still prevents re-discovery. GET previews; POST (or ?go=1) deletes."""
+    token = os.environ.get("CRON_TOKEN", "")
+    token_ok = bool(token) and request.args.get("token") == token
+    if not token_ok and "user_id" not in session:
+        return ("forbidden", 403)
+    from datetime import datetime, timezone
+    from models import LeadStatusHistory
+    cutoff = datetime(2026, 9, 3, tzinfo=timezone.utc)
+    keep_statuses = (Lead.STATUS_RESPONDED, Lead.STATUS_CALL_REQUIRED, Lead.STATUS_CLOSED)
+    with get_db() as db:
+        q = (db.query(Lead).outerjoin(Contact, Lead.contact_id == Contact.id)
+             .filter(Lead.created_at < cutoff, Lead.reply_detected == False,
+                     ~Lead.status.in_(keep_statuses))
+             .filter((Lead.contact_id.is_(None)) |
+                     ((Contact.full_name.is_(None) | (Contact.full_name == "")) &
+                      (Contact.email.is_(None) | (Contact.email == "")))))
+        leads = q.options(joinedload(Lead.company), joinedload(Lead.assigned_to)).all()
+        preview = [{"lead_id": l.id, "company": l.company.name if l.company else "?",
+                    "status": l.status, "assigned_to": l.assigned_to.full_name if l.assigned_to else None,
+                    "created": l.created_at.strftime("%Y-%m-%d") if l.created_at else None} for l in leads]
+        if request.method == "GET" and request.args.get("go") != "1":
+            return jsonify({"would_delete": len(preview), "cutoff": cutoff.isoformat(),
+                            "rule": "created before cutoff, no named contact and no email, not RESPONDED/CALL_REQUIRED/CLOSED",
+                            "leads": preview, "hint": "POST (or ?go=1) to delete"})
+        ids = [l.id for l in leads]
+        if ids:
+            db.query(EmailDraft).filter(EmailDraft.lead_id.in_(ids)).delete(synchronize_session=False)
+            db.query(LeadStatusHistory).filter(LeadStatusHistory.lead_id.in_(ids)).delete(synchronize_session=False)
+            db.query(Lead).filter(Lead.id.in_(ids)).delete(synchronize_session=False)
+    print(f"[ADMIN] purged {len(ids)} pre-ZoomInfo no-contact leads by {session.get('user_name', 'token')}")
+    return jsonify({"deleted": len(ids), "leads": preview})
+
+
 @app.route("/health")
 def health():
     return jsonify({
