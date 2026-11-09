@@ -208,6 +208,13 @@ def execute_run(run_id: int, user_id: int | None) -> None:
                 run.leads_created = len(lead_ids)
                 run.contacts_found = st["zoominfo_hits"] + st["web_hits"]
                 run.contacts_zoominfo = st["zoominfo_hits"]
+        if lead_ids and st.get("auto_drafted"):
+            try:
+                from modules.rep_alerts import send_rep_alerts
+                res = send_rep_alerts(since=_now() - timedelta(hours=2))
+                log.note(f"rep alerts: {res}")
+            except Exception as exc:
+                log.note(f"rep alert failed: {exc}")
         log.complete(f"done: {len(lead_ids)} new lead(s)")
 
     except Exception as exc:  # noqa: BLE001 — everything must land in the run record

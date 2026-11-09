@@ -76,6 +76,8 @@ Deployed via commit `5bbb10f` ("Fix discovery pipeline: extend search window to 
 
 **2026-11-09 — Deploy fix.** Render started building on Python 3.14, where SQLAlchemy resolves `postgresql://` to the `psycopg` (v3) driver and boot failed with `ModuleNotFoundError: No module named 'psycopg'`. Added `.python-version` (3.12.7) to pin the runtime and `psycopg[binary]` to requirements so either driver works.
 
+**2026-11-09 — Rep alerts.** `modules/rep_alerts.py`: after every scheduler cycle, after a discovery run that created drafts, and after `/admin/rebalance`, each rep with new Outlook drafts (last 26 h) gets one email from `bbrill@thelsa.com` listing the companies and draft types with dashboard links. Sent via Graph `sendMail` once Mail.Send is granted; until then falls back to the Gmail integration (Bill's token) with Reply-To bbrill@thelsa.com. Env: `REP_ALERT_FROM`, `REP_ALERT_CC`, `REP_ALERT_LOOKBACK_HOURS`, `DASHBOARD_URL`.
+
 ## Notes
 
 - Never reference insurance products/coverage anywhere in Thelsa-facing content — Thelsa is a moving/relocation company.

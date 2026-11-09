@@ -155,6 +155,13 @@ def run_cycle(triggered_by: str = "scheduler"):
     except Exception as e:
         log.error("Outlook tracking failed: %s", e, exc_info=True)
 
+    log.info("Alerting reps about new Outlook drafts...")
+    try:
+        from modules.rep_alerts import send_rep_alerts
+        log.info("Rep alerts: %s", send_rep_alerts())
+    except Exception as e:
+        log.error("Rep alert step failed: %s", e, exc_info=True)
+
     log.info("Sending morning alert...")
     try:
         new_today, pending = _count_leads()
