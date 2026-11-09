@@ -74,6 +74,8 @@ Deployed via commit `5bbb10f` ("Fix discovery pipeline: extend search window to 
 
 **2026-11-09 — Restyled to the Thelsa automation-library design system** (light #f5f6f8 page, white 12px-radius cards, Thelsa red #c0392b accent, #1a1a2e text, white sticky header with logo + 3px red rule, uppercase section labels, pill tags, KPI tiles). All in `templates/base.html` CSS variables; logo at `static/thelsa_logo.png`.
 
+**2026-11-09 — Deploy fix.** Render started building on Python 3.14, where SQLAlchemy resolves `postgresql://` to the `psycopg` (v3) driver and boot failed with `ModuleNotFoundError: No module named 'psycopg'`. Added `.python-version` (3.12.7) to pin the runtime and `psycopg[binary]` to requirements so either driver works.
+
 ## Notes
 
 - Never reference insurance products/coverage anywhere in Thelsa-facing content — Thelsa is a moving/relocation company.
