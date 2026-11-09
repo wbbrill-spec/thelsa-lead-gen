@@ -381,8 +381,8 @@ def mark_sent(lead_id: int):
 
         now = datetime.now(timezone.utc)
         lead.initial_sent_at = now
-        lead.followup_d2_scheduled = now + timedelta(days=2)
-        lead.followup_d5_scheduled = now + timedelta(days=5)
+        from modules.mod11_outlook_tracker import _schedule_followups
+        _schedule_followups(lead, now)
 
         from models import transition_status
         transition_status(
@@ -391,7 +391,7 @@ def mark_sent(lead_id: int):
             reason="Initial email marked as sent by rep"
         )
 
-    flash("Email marked as sent. Follow-ups scheduled for Day 2 and Day 5.", "success")
+    flash(f"Email marked as sent. Follow-ups scheduled for days {', '.join(map(str, config.FOLLOWUP_DAYS[:3]))}.", "success")
     return redirect(url_for("lead_detail", lead_id=lead_id))
 
 
@@ -522,6 +522,27 @@ def zoominfo_test():
     domain = request.args.get("domain", "bimbobakeriesusa.com")
     titles = request.args.get("titles", "Logistics Manager,Operations Manager,Supply Chain Manager,VP Operations").split(",")
     return jsonify(zoominfo.diagnose(company, domain, [t.strip() for t in titles if t.strip()]))
+
+
+@app.route("/admin/rebalance", methods=["GET", "POST"])
+def rebalance():
+    """One-shot: move every open lead still owned by Bill Brill 50/50 to the rep
+    pool and create their outreach drafts. GET shows a preview; POST does it."""
+    token = os.environ.get("CRON_TOKEN", "")
+    token_ok = bool(token) and request.args.get("token") == token
+    if not token_ok and "user_id" not in session:
+        return ("forbidden", 403)
+    from modules import assigner
+    if request.method == "GET" and request.args.get("go") != "1":
+        with get_db() as db:
+            legacy_ids = [u.id for u in db.query(User).filter(User.full_name == assigner.LEGACY_ASSIGNEE).all()]
+            n = db.query(Lead).filter(Lead.assigned_to_user_id.in_(legacy_ids),
+                                      Lead.status.in_(assigner._OPEN)).count() if legacy_ids else 0
+            pool = [u.full_name for u in assigner.rep_pool(db)]
+        return jsonify({"open_legacy_leads": n, "rep_pool": pool,
+                        "hint": "POST to this URL (or add ?go=1) to perform the rebalance"})
+    result = assigner.rebalance_legacy(changed_by=session.get("user_name", "system"))
+    return jsonify(result)
 
 
 @app.route("/health")

@@ -194,6 +194,7 @@ def execute_run(run_id: int, user_id: int | None) -> None:
         st = mod05_enricher.STATS
         log.stage("finishing", f"{len(lead_ids)} leads created — contacts: "
                                f"{st['zoominfo_hits']} ZoomInfo, {st['web_hits']} web, {st['empty']} none"
+                               f"; auto-assigned {st.get('auto_assigned', 0)}, Outlook drafts {st.get('auto_drafted', 0)}"
                                + (f"; ZoomInfo HTTP errors: {st['zoominfo_http_errors']}"
                                   if st["zoominfo_http_errors"] else ""))
 

@@ -50,6 +50,10 @@ SEARCH_MIN_LEFT = int(os.environ.get("SEARCH_MIN_LEFT", "15"))
 #           Drafts folder (the behaviour until Mail.Send is granted).
 FOLLOWUP_MODE = os.environ.get("FOLLOWUP_MODE", "draft").strip().lower()
 FOLLOWUP_BCC_REP = os.environ.get("FOLLOWUP_BCC_REP", "1").strip() not in ("0", "false", "no")
+# Calendar days after the initial send for the 1st / 2nd / 3rd follow-up.
+FOLLOWUP_DAYS = [int(x) for x in os.environ.get("FOLLOWUP_DAYS", "5,10,20").split(",") if x.strip()]
+while len(FOLLOWUP_DAYS) < 3:
+    FOLLOWUP_DAYS.append(FOLLOWUP_DAYS[-1] + 10)
 
 # ── Web Search ─────────────────────────────────────────────────────────────────
 SEARCH_API_KEY = os.environ.get("SEARCH_API_KEY", "")

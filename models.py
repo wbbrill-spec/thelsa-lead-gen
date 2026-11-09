@@ -148,13 +148,14 @@ class Lead(Base):
     STATUS_DRAFTED = "DRAFTED"
     STATUS_FOLLOWED_UP_D2 = "FOLLOWED_UP_D2"
     STATUS_FOLLOWED_UP_D5 = "FOLLOWED_UP_D5"
+    STATUS_FOLLOWED_UP_D20 = "FOLLOWED_UP_D20"   # third / final follow-up
     STATUS_RESPONDED = "RESPONDED"
     STATUS_CALL_REQUIRED = "CALL_REQUIRED"
     STATUS_CLOSED = "CLOSED"
 
     ALL_STATUSES = [
         STATUS_NEW, STATUS_APPROVED, STATUS_SKIPPED, STATUS_DRAFTED,
-        STATUS_FOLLOWED_UP_D2, STATUS_FOLLOWED_UP_D5, STATUS_RESPONDED,
+        STATUS_FOLLOWED_UP_D2, STATUS_FOLLOWED_UP_D5, STATUS_FOLLOWED_UP_D20, STATUS_RESPONDED,
         STATUS_CALL_REQUIRED, STATUS_CLOSED,
     ]
 
@@ -177,6 +178,8 @@ class Lead(Base):
     followup_d5_scheduled: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     followup_d2_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     followup_d5_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    followup_d20_scheduled: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    followup_d20_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     call_required_notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_to_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     sent_to_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
@@ -208,6 +211,7 @@ class EmailDraft(Base):
     TYPE_INITIAL = "INITIAL"
     TYPE_FOLLOWUP_D2 = "FOLLOWUP_D2"
     TYPE_FOLLOWUP_D5 = "FOLLOWUP_D5"
+    TYPE_FOLLOWUP_D20 = "FOLLOWUP_D20"
 
     # Language values
     LANG_EN = "EN"
@@ -315,6 +319,8 @@ _ADDED_COLUMNS = {
     "leads": [
         ("sent_message_id", "TEXT"),
         ("sent_language", "VARCHAR(5)"),
+        ("followup_d20_scheduled", "TIMESTAMP WITH TIME ZONE"),
+        ("followup_d20_sent_at", "TIMESTAMP WITH TIME ZONE"),
     ],
     "discovery_runs": [
         ("stage", "VARCHAR(40)"),
