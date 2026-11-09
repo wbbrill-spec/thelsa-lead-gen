@@ -294,7 +294,7 @@ class DiscoveryRun(Base):
         end = self.completed_at or self.heartbeat_at
         if self.started_at and end:
             try:
-                return (end - self.started_at).total_seconds()
+                return max(0.0, (end - self.started_at).total_seconds())
             except TypeError:  # mixed naive/aware (SQLite)
                 return None
         return None

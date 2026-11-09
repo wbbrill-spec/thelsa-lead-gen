@@ -72,6 +72,8 @@ Deployed via commit `5bbb10f` ("Fix discovery pipeline: extend search window to 
 
 **2026-11-09 — Auto-assignment + 5/10/20 follow-up cadence.** New `modules/assigner.py`: every new lead is round-robined to the rep pool (`ASSIGNABLE_REPS`, default "Gustavo Gonzalez,Armando Silveyra" — fewest open leads wins, ties → least recently assigned) and `draft_on_assign` creates the outreach draft in that rep's Outlook immediately; Bill Brill is no longer the default owner. `/admin/rebalance` (GET previews, `?go=1` or POST executes) moves every open lead still owned by Bill Brill 50/50 to the pool and drafts their outreach. Follow-ups are now three touches on `FOLLOWUP_DAYS` (default `5,10,20` calendar days after the initial send, weekend → Monday): statuses `FOLLOWED_UP_D2 → FOLLOWED_UP_D5 → FOLLOWED_UP_D20` (historical names kept; the numbers no longer mean days). Third touch (`_D20_*`) is a light, no-pressure close. All three are threaded replies in the rep's mailbox (BCC rep), drafts until `FOLLOWUP_MODE=send`.
 
+**2026-11-09 — Restyled to the Thelsa automation-library design system** (light #f5f6f8 page, white 12px-radius cards, Thelsa red #c0392b accent, #1a1a2e text, white sticky header with logo + 3px red rule, uppercase section labels, pill tags, KPI tiles). All in `templates/base.html` CSS variables; logo at `static/thelsa_logo.png`.
+
 ## Notes
 
 - Never reference insurance products/coverage anywhere in Thelsa-facing content — Thelsa is a moving/relocation company.
