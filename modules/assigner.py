@@ -109,4 +109,12 @@ def rebalance_legacy(changed_by: str = "system", draft: bool = True) -> dict:
                 if db.query(Lead).filter_by(id=lead_id).first().status == Lead.STATUS_DRAFTED:
                     drafted += 1
     print(f"[ASSIGN] rebalanced {len(plan)} legacy leads: {per_rep}; drafts created: {drafted}")
-    return {"moved": len(plan), "per_rep": per_rep, "drafts_created": drafted}
+    alerts = {}
+    if drafted:
+        try:
+            from datetime import datetime, timedelta, timezone
+            from modules.rep_alerts import send_rep_alerts
+            alerts = send_rep_alerts(since=datetime.now(timezone.utc) - timedelta(hours=1))
+        except Exception as exc:
+            alerts = {"error": str(exc)}
+    return {"moved": len(plan), "per_rep": per_rep, "drafts_created": drafted, "alerts": alerts}
