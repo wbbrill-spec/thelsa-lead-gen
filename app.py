@@ -610,6 +610,9 @@ def purge_orphan_drafts():
                 text = f"{m.get('subject', '')} {m.get('bodyPreview', '')}".lower()
                 if m["id"] in keep_ids or "thelsa" not in text:
                     continue
+                # Never touch a rep's own half-written draft: ours always have a subject and a recipient.
+                if not (m.get("subject") or "").strip() or not (m.get("toRecipients") or []):
+                    continue
                 to = ", ".join((r.get("emailAddress") or {}).get("address", "") for r in m.get("toRecipients") or [])
                 plan.append({"mailbox": mb, "id": m["id"], "subject": m.get("subject"), "to": to,
                              "created": m.get("createdDateTime")})
