@@ -561,6 +561,7 @@ def purge_no_contact():
     with get_db() as db:
         q = (db.query(Lead).outerjoin(Contact, Lead.contact_id == Contact.id)
              .filter(Lead.created_at < cutoff, Lead.reply_detected == False,
+                     Lead.initial_sent_at.is_(None),          # never actually emailed
                      ~Lead.status.in_(keep_statuses))
              .filter((Lead.contact_id.is_(None)) |
                      ((Contact.full_name.is_(None) | (Contact.full_name == "")) &
@@ -571,7 +572,7 @@ def purge_no_contact():
                     "created": l.created_at.strftime("%Y-%m-%d") if l.created_at else None} for l in leads]
         if request.method == "GET" and request.args.get("go") != "1":
             return jsonify({"would_delete": len(preview), "cutoff": cutoff.isoformat(),
-                            "rule": "created before cutoff, no named contact and no email, not RESPONDED/CALL_REQUIRED/CLOSED",
+                            "rule": "created before cutoff, no named contact and no email, never sent, not RESPONDED/CALL_REQUIRED/CLOSED",
                             "leads": preview, "hint": "POST (or ?go=1) to delete"})
         ids = [l.id for l in leads]
         if ids:
