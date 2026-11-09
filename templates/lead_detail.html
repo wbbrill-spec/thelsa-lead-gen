@@ -174,7 +174,7 @@
         <form method="POST" action="/leads/{{ lead.id }}/mark-sent" style="margin-bottom: 8px;">
           <button type="submit" class="btn btn-primary" style="width: 100%;">✉ Mark Initial Email Sent</button>
         </form>
-      {% elif lead.status in ['DRAFTED', 'FOLLOWED_UP_D2', 'FOLLOWED_UP_D5'] %}
+      {% elif lead.status in ['DRAFTED', 'FOLLOWED_UP_D2', 'FOLLOWED_UP_D5', 'FOLLOWED_UP_D20'] %}
         <form method="POST" action="/leads/{{ lead.id }}/mark-sent">
           <button type="submit" class="btn btn-primary" style="width: 100%;">✉ Mark Email Sent</button>
         </form>
@@ -209,14 +209,19 @@
           <span class="text-muted">Initial sent:</span> {{ lead.initial_sent_at.strftime('%b %d') }}
         </div>
         <div style="margin-bottom: 6px;">
-          <span class="text-muted">Day 2:</span>
+          <span class="text-muted">Follow-up 1:</span>
           {{ lead.followup_d2_scheduled.strftime('%b %d') if lead.followup_d2_scheduled else '—' }}
           {% if lead.followup_d2_sent_at %}<span style="color: var(--green);">✓</span>{% endif %}
         </div>
-        <div>
-          <span class="text-muted">Day 5:</span>
+        <div style="margin-bottom: 6px;">
+          <span class="text-muted">Follow-up 2:</span>
           {{ lead.followup_d5_scheduled.strftime('%b %d') if lead.followup_d5_scheduled else '—' }}
           {% if lead.followup_d5_sent_at %}<span style="color: var(--green);">✓</span>{% endif %}
+        </div>
+        <div>
+          <span class="text-muted">Follow-up 3:</span>
+          {{ lead.followup_d20_scheduled.strftime('%b %d') if lead.followup_d20_scheduled else '—' }}
+          {% if lead.followup_d20_sent_at %}<span style="color: var(--green);">✓</span>{% endif %}
         </div>
       </div>
     </div>
