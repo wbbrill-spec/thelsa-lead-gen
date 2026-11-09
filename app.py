@@ -583,6 +583,53 @@ def purge_no_contact():
     return jsonify({"deleted": len(ids), "leads": preview})
 
 
+@app.route("/admin/purge-orphan-drafts", methods=["GET", "POST"])
+def purge_orphan_drafts():
+    """Delete Outlook drafts the app created for leads that no longer exist.
+    Scope: Drafts folder of each rep mailbox, created since ?since=YYYY-MM-DD
+    (default today UTC), that mention Thelsa and whose Graph id is NOT a
+    provider_draft_id of any surviving EmailDraft. GET previews; POST (?go=1) deletes."""
+    token = os.environ.get("CRON_TOKEN", "")
+    token_ok = bool(token) and request.args.get("token") == token
+    if not token_ok and "user_id" not in session:
+        return ("forbidden", 403)
+    from datetime import datetime, timezone
+    from modules.graph_outlook import list_drafts, delete_message
+    since = request.args.get("since") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    since_iso = f"{since}T00:00:00Z"
+    with get_db() as db:
+        keep_ids = {d.provider_draft_id for d in db.query(EmailDraft).filter(
+            EmailDraft.provider == "outlook", EmailDraft.provider_draft_id.isnot(None)).all()}
+        mailboxes = [(u.full_name, u.email_outlook.strip().lower()) for u in db.query(User).filter(
+            User.is_active == True, User.email_outlook.isnot(None)).all()
+            if (u.full_name or "").strip() in ("Gustavo Gonzalez", "Armando Silveyra")]
+    plan, errors = [], []
+    for name, mb in mailboxes:
+        try:
+            for m in list_drafts(mb, since_iso):
+                text = f"{m.get('subject', '')} {m.get('bodyPreview', '')}".lower()
+                if m["id"] in keep_ids or "thelsa" not in text:
+                    continue
+                to = ", ".join((r.get("emailAddress") or {}).get("address", "") for r in m.get("toRecipients") or [])
+                plan.append({"mailbox": mb, "id": m["id"], "subject": m.get("subject"), "to": to,
+                             "created": m.get("createdDateTime")})
+        except Exception as exc:
+            errors.append(f"{mb}: {exc}")
+    execute = request.method == "POST" or request.args.get("go") == "1"
+    deleted = 0
+    if execute:
+        for item in plan:
+            try:
+                delete_message(item["mailbox"], item["id"])
+                deleted += 1
+            except Exception as exc:
+                errors.append(f"{item['mailbox']} {item['subject']}: {exc}")
+        print(f"[ADMIN] deleted {deleted} orphan Outlook drafts since {since}")
+    return jsonify({"since": since, "kept_app_drafts": len(keep_ids),
+                    "would_delete" if not execute else "deleted": len(plan) if not execute else deleted,
+                    "errors": errors, "drafts": [{k: v for k, v in d.items() if k != "id"} for d in plan]})
+
+
 @app.route("/health")
 def health():
     return jsonify({
