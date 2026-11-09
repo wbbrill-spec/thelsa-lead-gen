@@ -202,3 +202,31 @@ def _text_to_html(text: str) -> str:
         + html.escape(p).replace("\n", "<br>") + "</p>"
         for p in paras
     ) + "<br>"
+
+
+def list_drafts(mailbox: str, since_iso: str) -> list[dict]:
+    """Messages in the Drafts folder created since ``since_iso`` (paged)."""
+    mailbox = (mailbox or "").strip()
+    if mailbox.lower() not in ALLOWED_MAILBOXES:
+        raise ValueError(f"mailbox not allowed: {mailbox}")
+    url = (f"{GRAPH}/users/{mailbox}/mailFolders/drafts/messages"
+           f"?$select=id,subject,toRecipients,createdDateTime,bodyPreview&$top=100"
+           f"&$filter=createdDateTime ge {since_iso}")
+    out: list[dict] = []
+    while url and len(out) < 1000:
+        r = graph_request("GET", url, timeout=30)
+        if r.status_code >= 300:
+            raise RuntimeError(f"Graph list drafts failed [{r.status_code}]: {r.text[:300]}")
+        j = r.json()
+        out.extend(j.get("value", []))
+        url = j.get("@odata.nextLink")
+    return out
+
+
+def delete_message(mailbox: str, message_id: str) -> None:
+    mailbox = (mailbox or "").strip()
+    if mailbox.lower() not in ALLOWED_MAILBOXES:
+        raise ValueError(f"mailbox not allowed: {mailbox}")
+    r = graph_request("DELETE", f"{GRAPH}/users/{mailbox}/messages/{message_id}", timeout=30)
+    if r.status_code not in (204, 200, 404):
+        raise RuntimeError(f"Graph delete failed [{r.status_code}]: {r.text[:300]}")
