@@ -6,8 +6,10 @@ Mail.Send; otherwise they are left as threaded reply drafts.
 
 Called by the scheduler/cron. Uses the existing Lead status machine:
 APPROVED / DRAFTED --(sent detected)--> DRAFTED (initial_sent_at set)
-DRAFTED --(Day-2 working)--> FOLLOWED_UP_D2
-FOLLOWED_UP_D2 --(Day-5 working)--> FOLLOWED_UP_D5
+DRAFTED --(1st follow-up, default day 5)--> FOLLOWED_UP_D2
+FOLLOWED_UP_D2 --(2nd, default day 10)--> FOLLOWED_UP_D5
+FOLLOWED_UP_D5 --(3rd/final, default day 20)--> FOLLOWED_UP_D20
+(column/status names keep the historical D2/D5 labels; cadence is config.FOLLOWUP_DAYS)
 any --(reply)--> RESPONDED (stops follow-ups)
 
 Two sent-detection paths:
@@ -71,6 +73,22 @@ _ES_HINTS = ("mudanza", "reubicación", "reubicacion", "expansión", "expansion 
 def _guess_language(subject: str) -> str:
     s = (subject or "").lower()
     return "ES" if any(h in s for h in _ES_HINTS) else "EN"
+
+
+def _schedule_followups(lead, sent_dt: datetime) -> None:
+    """Set the three follow-up dates from config.FOLLOWUP_DAYS (calendar days
+    after the initial send; a date landing on a weekend rolls to Monday)."""
+    import config
+    d1, d2, d3 = config.FOLLOWUP_DAYS[:3]
+    lead.followup_d2_scheduled = _next_weekday(sent_dt + timedelta(days=d1))
+    lead.followup_d5_scheduled = _next_weekday(sent_dt + timedelta(days=d2))
+    lead.followup_d20_scheduled = _next_weekday(sent_dt + timedelta(days=d3))
+
+
+def _next_weekday(dt: datetime) -> datetime:
+    while dt.weekday() >= 5:
+        dt = dt + timedelta(days=1)
+    return dt
 
 
 def _add_working_days(dt: datetime, n: int) -> datetime:
@@ -188,8 +206,7 @@ def run_outlook_tracking() -> dict:
                 lead.sent_conversation_id = match.get("conversationId")
                 lead.sent_message_id = match.get("id")
                 lead.sent_language = lang
-                lead.followup_d2_scheduled = _add_working_days(sent_dt, 2)
-                lead.followup_d5_scheduled = _add_working_days(sent_dt, 5)
+                _schedule_followups(lead, sent_dt)
                 transition_status(db, lead, Lead.STATUS_DRAFTED, "system",
                                   f"Initial email sent to {to.get('address') or '?'}")
             stats["sent"] += 1
@@ -239,8 +256,7 @@ def run_outlook_tracking() -> dict:
                 lead.sent_message_id = m.get("id")
                 lead.sent_language = _guess_language(m.get("subject") or "")
                 lead.assigned_to_user_id = uid  # reassign to the rep who actually emailed the prospect
-                lead.followup_d2_scheduled = _add_working_days(sent_dt, 2)
-                lead.followup_d5_scheduled = _add_working_days(sent_dt, 5)
+                _schedule_followups(lead, sent_dt)
                 transition_status(db, lead, Lead.STATUS_DRAFTED, "system",
                                   f"Confirmed outreach to {ea.get('address') or cdom} from {mb}; reassigned from {LEGACY_ASSIGNEE}")
             stats["sent"] += 1
@@ -284,23 +300,25 @@ def run_outlook_tracking() -> dict:
             stats["errors"] += 1
             print(f"[MOD-11] reply-detect error lead {lead_id}: {e}")
 
-    # 3) FOLLOW-UPS at Day-2 and Day-5 (working days)
+    # 3) FOLLOW-UPS — three touches on the configured cadence (default 5/10/20 days)
     stats["d2"] = _run_followups(now, "FOLLOWUP_D2")
     stats["d5"] = _run_followups(now, "FOLLOWUP_D5")
+    stats["d20"] = _run_followups(now, "FOLLOWUP_D20")
     return stats
 
 
+_STAGES = {
+    #  draft_type      : (from_status,                 sched attr,               sent attr,             to_status)
+    "FOLLOWUP_D2":  (Lead.STATUS_DRAFTED,        "followup_d2_scheduled",  "followup_d2_sent_at",  Lead.STATUS_FOLLOWED_UP_D2),
+    "FOLLOWUP_D5":  (Lead.STATUS_FOLLOWED_UP_D2, "followup_d5_scheduled",  "followup_d5_sent_at",  Lead.STATUS_FOLLOWED_UP_D5),
+    "FOLLOWUP_D20": (Lead.STATUS_FOLLOWED_UP_D5, "followup_d20_scheduled", "followup_d20_sent_at", Lead.STATUS_FOLLOWED_UP_D20),
+}
+
+
 def _run_followups(now: datetime, draft_type: str) -> int:
-    if draft_type == "FOLLOWUP_D2":
-        from_status = Lead.STATUS_DRAFTED
-        sched_col = Lead.followup_d2_scheduled
-        sent_col = Lead.followup_d2_sent_at
-        to_status = Lead.STATUS_FOLLOWED_UP_D2
-    else:
-        from_status = Lead.STATUS_FOLLOWED_UP_D2
-        sched_col = Lead.followup_d5_scheduled
-        sent_col = Lead.followup_d5_sent_at
-        to_status = Lead.STATUS_FOLLOWED_UP_D5
+    from_status, sched_attr, sent_attr, to_status = _STAGES[draft_type]
+    sched_col = getattr(Lead, sched_attr)
+    sent_col = getattr(Lead, sent_attr)
 
     with get_db() as db:
         due = (db.query(Lead)
@@ -319,7 +337,7 @@ def _run_followups(now: datetime, draft_type: str) -> int:
             # the lead is never re-picked (this is what stops duplicate follow-ups).
             with get_db() as db:
                 lead = db.query(Lead).filter_by(id=lead_id).first()
-                setattr(lead, "followup_d2_sent_at" if draft_type == "FOLLOWUP_D2" else "followup_d5_sent_at", now)
+                setattr(lead, sent_attr, now)
                 if created == "sent":
                     reason = f"{draft_type} follow-up SENT from {mb} (reply in thread, BCC rep)"
                 elif created:

@@ -16,7 +16,8 @@ from modules.mod04_segmentation import SegmentedCandidate
 from modules.llm import ask_json, LLMError
 
 # Per-run enrichment stats, reset by the pipeline runner.
-STATS = {"zoominfo_hits": 0, "web_hits": 0, "empty": 0, "zoominfo_http_errors": 0}
+STATS = {"zoominfo_hits": 0, "web_hits": 0, "empty": 0, "zoominfo_http_errors": 0,
+         "auto_assigned": 0, "auto_drafted": 0}
 
 
 def enrich_contacts(
@@ -35,12 +36,17 @@ def enrich_contacts(
         List of new Lead IDs created
     """
     from pipeline import heartbeat
+    from modules.assigner import assign_new_lead
     lead_ids = []
     for candidate in candidates:
         heartbeat()
         lead_id = _process_one(candidate, generated_by_user_id)
         if lead_id:
             lead_ids.append(lead_id)
+            # Round-robin to a rep and create the outreach draft in their Outlook.
+            res = assign_new_lead(lead_id)
+            STATS["auto_assigned"] = STATS.get("auto_assigned", 0) + (1 if res.get("rep") else 0)
+            STATS["auto_drafted"] = STATS.get("auto_drafted", 0) + (1 if res.get("drafted") else 0)
     return lead_ids
 
 

@@ -127,7 +127,7 @@ _WHY_THELSA_ES = """Por qué Thelsa es el socio indicado (integra UNA o DOS de e
 - Socio de confianza de multinacionales y empresas de gestión de reubicación para mudanzas México–EE. UU."""
 
 _D2_EN = """Write a short, warm follow-up email in English from {sender_name} at Thelsa to {contact_name} at {company_name}.
-It is a reply in the same thread as the original outreach (subject "{original_subject}"), sent two working days later. No reply has come yet.
+It is a reply in the same thread as the original outreach (subject "{original_subject}"), sent a few days later. No reply has come yet.
 
 {why_thelsa}
 
@@ -145,7 +145,7 @@ Return ONLY a JSON object:
 {{"subject": "Re: {original_subject}", "body": "..."}}"""
 
 _D2_ES = """Escribe un breve y cordial correo de seguimiento en español de {sender_name}, de Thelsa, para {contact_name} en {company_name}.
-Es una respuesta en el mismo hilo del correo original (asunto "{original_subject}"), enviada dos días hábiles después. Aún no hay respuesta.
+Es una respuesta en el mismo hilo del correo original (asunto "{original_subject}"), enviada unos días después. Aún no hay respuesta.
 
 {why_thelsa}
 
@@ -162,8 +162,8 @@ Requisitos:
 Responde ÚNICAMENTE con un objeto JSON:
 {{"subject": "Re: {original_subject}", "body": "..."}}"""
 
-_D5_SMB_EN = """Write a warm, confident final follow-up email in English from {sender_name} at Thelsa to {contact_name} at {company_name}.
-It is a reply in the same thread as the original outreach (subject "{original_subject}"), about a week after the first note and after one earlier follow-up. No reply has come.
+_D5_SMB_EN = """Write a warm, confident second follow-up email in English from {sender_name} at Thelsa to {contact_name} at {company_name}.
+It is a reply in the same thread as the original outreach (subject "{original_subject}"), about ten days after the first note and after one earlier follow-up. No reply has come.
 
 {why_thelsa}
 
@@ -181,8 +181,8 @@ Requirements:
 Return ONLY a JSON object:
 {{"subject": "Re: {original_subject}", "body": "..."}}"""
 
-_D5_RMC_EN = """Write a warm, confident final follow-up email in English from {sender_name} at Thelsa to {contact_name}, {contact_title} at {rmc_name} (a relocation management company).
-It is a reply in the same thread as the original outreach (subject "{original_subject}"), about a week after the first note and after one earlier follow-up. No reply has come.
+_D5_RMC_EN = """Write a warm, confident second follow-up email in English from {sender_name} at Thelsa to {contact_name}, {contact_title} at {rmc_name} (a relocation management company).
+It is a reply in the same thread as the original outreach (subject "{original_subject}"), about ten days after the first note and after one earlier follow-up. No reply has come.
 
 {why_thelsa}
 
@@ -200,8 +200,8 @@ Requirements:
 Return ONLY a JSON object:
 {{"subject": "Re: {original_subject}", "body": "..."}}"""
 
-_D5_SMB_ES = """Escribe un correo de seguimiento final, cálido y seguro, en español de {sender_name}, de Thelsa, para {contact_name} en {company_name}.
-Es una respuesta en el mismo hilo del correo original (asunto "{original_subject}"), aproximadamente una semana después del primer mensaje y tras un seguimiento previo. No ha habido respuesta.
+_D5_SMB_ES = """Escribe un segundo correo de seguimiento, cálido y seguro, en español de {sender_name}, de Thelsa, para {contact_name} en {company_name}.
+Es una respuesta en el mismo hilo del correo original (asunto "{original_subject}"), unos diez días después del primer mensaje y tras un seguimiento previo. No ha habido respuesta.
 
 {why_thelsa}
 
@@ -220,6 +220,40 @@ Responde ÚNICAMENTE con un objeto JSON:
 {{"subject": "Re: {original_subject}", "body": "..."}}"""
 
 _D5_RMC_ES = _D5_SMB_ES
+
+_D20_EN = """Write a short, friendly final check-in email in English from {sender_name} at Thelsa to {contact_name} at {company_name}.
+It is a reply in the same thread as the original outreach (subject "{original_subject}"), about three weeks after the first note and after two earlier follow-ups. No reply has come.
+
+{why_thelsa}
+
+Requirements:
+- 70–100 words, 2 short paragraphs
+- Gracious and light — zero pressure; acknowledge they may be heads-down on the expansion ({expansion_detail}) and that timing may simply be off
+- One sentence on why Thelsa would be a dependable partner when the commercial move or employee relocations come up
+- Make it effortless: "if a 15-minute call is ever useful, just reply with a day that works — otherwise I'll leave it here and wish you well with the move"
+- Greet by first name ("Hi {contact_first_name},"); never use a placeholder like "[Name]"
+- Sign off with just the sender's first name: {sender_first_name}
+- Do NOT include the subject line in the body
+
+Return ONLY a JSON object:
+{{"subject": "Re: {original_subject}", "body": "..."}}"""
+
+_D20_ES = """Escribe un breve y amable correo de cierre en español de {sender_name}, de Thelsa, para {contact_name} en {company_name}.
+Es una respuesta en el mismo hilo del correo original (asunto "{original_subject}"), unas tres semanas después del primer mensaje y tras dos seguimientos previos. No ha habido respuesta.
+
+{why_thelsa}
+
+Requisitos:
+- 70–100 palabras, 2 párrafos cortos
+- Tono cordial y ligero, sin ninguna presión; reconoce que probablemente están enfocados en la expansión ({expansion_detail}) y que quizá simplemente no es el momento
+- Una frase sobre por qué Thelsa sería un socio confiable cuando llegue la mudanza comercial o las reubicaciones de personal
+- Facilítalo al máximo: "si en algún momento le sirve una llamada de 15 minutos, basta con responder con un día que le acomode; de lo contrario, lo dejo aquí y le deseo mucho éxito con la expansión"
+- Saluda por nombre ("Hola {contact_first_name}," o "Estimado/a {contact_first_name},"); nunca uses "[Nombre]"
+- Firma solo con el nombre de quien envía: {sender_first_name}
+- NO incluyas el asunto en el cuerpo
+
+Responde ÚNICAMENTE con un objeto JSON:
+{{"subject": "Re: {original_subject}", "body": "..."}}"""
 
 # ── Main functions ─────────────────────────────────────────────────────────────
 
@@ -445,6 +479,8 @@ def _generate_email(ctx: dict, draft_type: str, lang: str) -> tuple[str, str]:
             template = _D5_RMC_EN if is_rmc else _D5_SMB_EN
         else:
             template = _D5_RMC_ES if is_rmc else _D5_SMB_ES
+    elif draft_type == "FOLLOWUP_D20":
+        template = _D20_ES if lang == "ES" else _D20_EN
     else:
         raise ValueError(f"Unknown draft_type: {draft_type}")
 
